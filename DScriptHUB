@@ -1,17 +1,13 @@
 -- ============================================================
---  DScriptHUB - BASE GUI SCRIPT
---  LocalScript | Letakkan di StarterPlayerScripts
--- ============================================================
---  CARA PAKAI:
---  1. Cari bagian "TAMBAH SCRIPT FITUR DI SINI" pada setiap tab
---  2. Gunakan AddToggle(), AddButton(), AddSlider()
---  3. Keybind: RightShift untuk toggle buka/tutup
+--  DScriptHUB - UPGRADED GUI SCRIPT (2026)
+--  LocalScript | Letakkan di StarterPlayerScripts / Executor
 -- ============================================================
 
-local Players          = game:GetService("Players")
+local Players         = game:GetService("Players")
 local TweenService     = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local RunService       = game:GetService("RunService")
+local Lighting         = game:GetService("Lighting")
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui   = LocalPlayer:WaitForChild("PlayerGui")
@@ -22,7 +18,7 @@ if PlayerGui:FindFirstChild("DScriptHUB") then
 end
 
 -- ============================================================
--- KONFIGURASI
+-- KONFIGURASI & STATE MANAGEMENT
 -- ============================================================
 local CONFIG = {
     MenuTitle     = "DScriptHUB",
@@ -53,6 +49,19 @@ local TABS = {
     { Name = "Settings", Icon = "⚙"  },
 }
 
+-- Penyimpanan nilai fitur untuk sistem Config
+local FeaturesState = {
+    ReduceLag = false,
+    WhiteScreen = false,
+    Visual1 = false, Visual2 = false, Visual3 = false, VisualSlider = 50,
+    Killer1 = false, Killer2 = false, KillerSlider = 1,
+    Survivor1 = false, Survivor2 = false,
+    Misc1 = false, Misc2 = false, MiscSlider = 16
+}
+
+-- Elemen UI Referensi Toggle untuk sinkronisasi Load Config
+local RegisteredToggles = {}
+
 -- ============================================================
 -- SCREENGUI
 -- ============================================================
@@ -62,6 +71,118 @@ ScreenGui.ResetOnSpawn      = false
 ScreenGui.ZIndexBehavior    = Enum.ZIndexBehavior.Global
 ScreenGui.IgnoreGuiInset    = true
 ScreenGui.Parent            = PlayerGui
+
+-- ============================================================
+-- POPUP PROMPT GENERATOR (Untuk Save / Load UI)
+-- ============================================================
+local function CreatePopupPrompt(titleText, isDropdown, listOptions, callback)
+    local Overlay = Instance.new("Frame")
+    Overlay.Size = UDim2.new(1, 0, 1, 0)
+    Overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    Overlay.BackgroundTransparency = 0.6
+    Overlay.ZIndex = 100
+    Overlay.Parent = ScreenGui
+
+    local PopFrame = Instance.new("Frame")
+    PopFrame.Size = UDim2.new(0, 320, 0, isDropdown and 220 or 160)
+    PopFrame.Position = UDim2.new(0.5, -160, 0.5, -(PopFrame.Size.Y.Offset/2))
+    PopFrame.BackgroundColor3 = CONFIG.BgMain
+    PopFrame.Parent = Overlay
+    Instance.new("UICorner", PopFrame).CornerRadius = UDim.new(0, 8)
+    local stroke = Instance.new("UIStroke", PopFrame)
+    stroke.Color = CONFIG.AccentColor
+
+    local pTitle = Instance.new("TextLabel")
+    pTitle.Size = UDim2.new(1, 0, 0, 35)
+    pTitle.Text = titleText
+    pTitle.TextColor3 = CONFIG.TextPrimary
+    pTitle.Font = Enum.Font.GothamBold
+    pTitle.TextSize = 13
+    pTitle.BackgroundTransparency = 1
+    pTitle.Parent = PopFrame
+
+    local InteractionElement
+    if not isDropdown then
+        InteractionElement = Instance.new("TextBox")
+        InteractionElement.Size = UDim2.new(1, -30, 0, 35)
+        InteractionElement.Position = UDim2.new(0, 15, 0, 50)
+        InteractionElement.BackgroundColor3 = CONFIG.BgItem
+        InteractionElement.PlaceholderText = "Masukkan nama config..."
+        InteractionElement.TextColor3 = CONFIG.TextPrimary
+        InteractionElement.Text = ""
+        InteractionElement.Font = Enum.Font.Gotham
+        InteractionElement.TextSize = 12
+        InteractionElement.Parent = PopFrame
+        Instance.new("UICorner", InteractionElement).CornerRadius = UDim.new(0, 5)
+    else
+        InteractionElement = Instance.new("ScrollingFrame")
+        InteractionElement.Size = UDim2.new(1, -30, 0, 100)
+        InteractionElement.Position = UDim2.new(0, 15, 0, 50)
+        InteractionElement.BackgroundColor3 = CONFIG.BgItem
+        InteractionElement.ScrollBarThickness = 4
+        InteractionElement.CanvasSize = UDim2.new(0, 0, 0, 0)
+        InteractionElement.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        InteractionElement.Parent = PopFrame
+        Instance.new("UICorner", InteractionElement).CornerRadius = UDim.new(0, 5)
+
+        local listLayout = Instance.new("UIListLayout")
+        listLayout.Padding = UDim.new(0, 2)
+        listLayout.Parent = InteractionElement
+
+        for _, optName in ipairs(listOptions) do
+            local oBtn = Instance.new("TextButton")
+            oBtn.Size = UDim2.new(1, 0, 0, 28)
+            oBtn.BackgroundColor3 = CONFIG.BgContent
+            oBtn.Text = optName
+            oBtn.TextColor3 = CONFIG.TextPrimary
+            oBtn.Font = Enum.Font.Gotham
+            oBtn.TextSize = 11
+            oBtn.Parent = InteractionElement
+            Instance.new("UICorner", oBtn).CornerRadius = UDim.new(0, 4)
+
+            oBtn.MouseButton1Click:Connect(function()
+                Overlay:Destroy()
+                if callback then callback(optName) end
+            end)
+        end
+    end
+
+    local BtnContainer = Instance.new("Frame")
+    BtnContainer.Size = UDim2.new(1, -30, 0, 35)
+    BtnContainer.Position = UDim2.new(0, 15, 1, -45)
+    BtnContainer.BackgroundTransparency = 1
+    BtnContainer.Parent = PopFrame
+
+    local Cancel = Instance.new("TextButton")
+    Cancel.Size = UDim2.new(0.48, 0, 1, 0)
+    Cancel.BackgroundColor3 = CONFIG.BgItem
+    Cancel.Text = "Batal"
+    Cancel.TextColor3 = CONFIG.TextSecondary
+    Cancel.Font = Enum.Font.Gotham
+    Cancel.TextSize = 12
+    Cancel.Parent = BtnContainer
+    Instance.new("UICorner", Cancel).CornerRadius = UDim.new(0, 5)
+    Cancel.MouseButton1Click:Connect(function() Overlay:Destroy() end)
+
+    if not isDropdown then
+        local Confirm = Instance.new("TextButton")
+        Confirm.Size = UDim2.new(0.48, 0, 1, 0)
+        Confirm.Position = UDim2.new(0.52, 0, 0, 0)
+        Confirm.BackgroundColor3 = CONFIG.AccentColor
+        Confirm.Text = "Konfirmasi"
+        Confirm.TextColor3 = Color3.fromRGB(255, 255, 255)
+        Confirm.Font = Enum.Font.GothamBold
+        Confirm.TextSize = 12
+        Confirm.Parent = BtnContainer
+        Instance.new("UICorner", Confirm).CornerRadius = UDim.new(0, 5)
+
+        Confirm.MouseButton1Click:Connect(function()
+            local text = InteractionElement.Text
+            Overlay:Destroy()
+            if callback and text ~= "" then callback(text) end
+        end)
+    end
+end
 
 -- ============================================================
 -- FLOATING BUTTON
@@ -102,7 +223,7 @@ ms.Color     = CONFIG.BorderColor
 ms.Thickness = 1
 
 -- ============================================================
--- TITLE BAR (ZIndex tinggi supaya tombol close bisa diklik)
+-- TITLE BAR
 -- ============================================================
 local TitleBar = Instance.new("Frame")
 TitleBar.Name             = "TitleBar"
@@ -113,7 +234,6 @@ TitleBar.BorderSizePixel  = 0
 TitleBar.ZIndex           = 10
 TitleBar.Parent           = MainFrame
 
--- Label judul
 local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size               = UDim2.new(1, -110, 1, 0)
 TitleLabel.Position           = UDim2.new(0, 14, 0, 0)
@@ -130,7 +250,6 @@ TitleLabel.Font       = Enum.Font.Gotham
 TitleLabel.ZIndex     = 11
 TitleLabel.Parent     = TitleBar
 
--- Fungsi buat tombol title bar
 local function MakeTitleBtn(symbol, offsetX, color)
     local btn = Instance.new("TextButton")
     btn.Size              = UDim2.new(0, 26, 0, 26)
@@ -141,21 +260,15 @@ local function MakeTitleBtn(symbol, offsetX, color)
     btn.TextColor3        = color or CONFIG.TextSecondary
     btn.TextSize          = 13
     btn.Font              = Enum.Font.GothamBold
-    btn.ZIndex            = 15   -- ZIndex paling atas supaya selalu bisa diklik
+    btn.ZIndex            = 15
     btn.Parent            = TitleBar
     Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 5)
 
-    btn.MouseEnter:Connect(function()
-        btn.BackgroundColor3 = Color3.fromRGB(55, 55, 65)
-    end)
-    btn.MouseLeave:Connect(function()
-        btn.BackgroundColor3 = Color3.fromRGB(38, 38, 46)
-    end)
+    btn.MouseEnter:Connect(function() btn.BackgroundColor3 = Color3.fromRGB(55, 55, 65) end)
+    btn.MouseLeave:Connect(function() btn.BackgroundColor3 = Color3.fromRGB(38, 38, 46) end)
     return btn
 end
 
--- Tombol: Close, Minimize, Fullscreen
--- offsetX negatif dari kanan title bar
 local CloseBtn    = MakeTitleBtn("✕", -10,  Color3.fromRGB(210, 65, 65))
 local MinimizeBtn = MakeTitleBtn("─", -42,  CONFIG.TextSecondary)
 local FullBtn     = MakeTitleBtn("⛶", -74, CONFIG.TextSecondary)
@@ -172,7 +285,6 @@ Sidebar.BorderSizePixel  = 0
 Sidebar.ZIndex           = 6
 Sidebar.Parent           = MainFrame
 
--- Garis pemisah sidebar
 local SideDiv = Instance.new("Frame")
 SideDiv.Size             = UDim2.new(0, 1, 1, 0)
 SideDiv.Position         = UDim2.new(1, 0, 0, 0)
@@ -181,7 +293,6 @@ SideDiv.BorderSizePixel  = 0
 SideDiv.ZIndex           = 6
 SideDiv.Parent           = Sidebar
 
--- Search box
 local SearchBox = Instance.new("TextBox")
 SearchBox.Size              = UDim2.new(1, -16, 0, 30)
 SearchBox.Position          = UDim2.new(0, 8, 0, 8)
@@ -198,7 +309,6 @@ SearchBox.ZIndex            = 7
 SearchBox.Parent            = Sidebar
 Instance.new("UICorner", SearchBox).CornerRadius = UDim.new(0, 6)
 
--- Tab list scroll
 local TabList = Instance.new("ScrollingFrame")
 TabList.Size                 = UDim2.new(1, 0, 1, -98)
 TabList.Position             = UDim2.new(0, 0, 0, 46)
@@ -222,7 +332,6 @@ TabListPad.PaddingRight = UDim.new(0, 8)
 TabListPad.PaddingTop   = UDim.new(0, 4)
 TabListPad.Parent       = TabList
 
--- Avatar / nama di bawah sidebar
 local AvatarFrame = Instance.new("Frame")
 AvatarFrame.Size             = UDim2.new(1, 0, 0, 46)
 AvatarFrame.Position         = UDim2.new(0, 0, 1, -46)
@@ -278,17 +387,17 @@ ContentPanel.ZIndex           = 6
 ContentPanel.Parent           = MainFrame
 
 -- ============================================================
--- HELPERS
+-- HELPERS (Fix Canvas & UI Cutting Issue)
 -- ============================================================
 local function MakeContentFrame()
     local sf = Instance.new("ScrollingFrame")
     sf.Size                = UDim2.new(1, 0, 1, 0)
     sf.BackgroundTransparency = 1
     sf.BorderSizePixel     = 0
-    sf.ScrollBarThickness  = 3
+    sf.ScrollBarThickness  = 4
     sf.ScrollBarImageColor3= CONFIG.AccentColor
     sf.CanvasSize          = UDim2.new(0, 0, 0, 0)
-    sf.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    sf.AutomaticCanvasSize = Enum.AutomaticSize.Y  -- Mencegah menu terpotong vertikal
     sf.Visible             = false
     sf.ZIndex              = 7
     sf.Parent              = ContentPanel
@@ -321,10 +430,8 @@ local function AddSectionHeader(parent, title)
     return lbl
 end
 
-local function AddToggle(parent, labelText, defaultVal, callback)
-    defaultVal = defaultVal or false
-    local state = defaultVal
-
+local function AddToggle(parent, configKey, labelText, defaultVal, callback)
+    FeaturesState[configKey] = defaultVal
     local row = Instance.new("Frame")
     row.Size             = UDim2.new(1, 0, 0, 40)
     row.BackgroundColor3 = CONFIG.BgItem
@@ -348,7 +455,7 @@ local function AddToggle(parent, labelText, defaultVal, callback)
     local toggleBg = Instance.new("Frame")
     toggleBg.Size             = UDim2.new(0, 38, 0, 20)
     toggleBg.Position         = UDim2.new(1, -50, 0.5, -10)
-    toggleBg.BackgroundColor3 = state and CONFIG.ToggleOn or CONFIG.ToggleOff
+    toggleBg.BackgroundColor3 = FeaturesState[configKey] and CONFIG.ToggleOn or CONFIG.ToggleOff
     toggleBg.BorderSizePixel  = 0
     toggleBg.ZIndex           = 9
     toggleBg.Parent           = row
@@ -356,7 +463,7 @@ local function AddToggle(parent, labelText, defaultVal, callback)
 
     local knob = Instance.new("Frame")
     knob.Size             = UDim2.new(0, 14, 0, 14)
-    knob.Position         = state and UDim2.new(1, -17, 0.5, -7) or UDim2.new(0, 3, 0.5, -7)
+    knob.Position         = FeaturesState[configKey] and UDim2.new(1, -17, 0.5, -7) or UDim2.new(0, 3, 0.5, -7)
     knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     knob.BorderSizePixel  = 0
     knob.ZIndex           = 10
@@ -370,22 +477,36 @@ local function AddToggle(parent, labelText, defaultVal, callback)
     btn.ZIndex             = 11
     btn.Parent             = row
 
+    local function updateVisuals(anim)
+        local duration = anim and 0.15 or 0
+        TweenService:Create(toggleBg, TweenInfo.new(duration), {
+            BackgroundColor3 = FeaturesState[configKey] and CONFIG.ToggleOn or CONFIG.ToggleOff
+        }):Play()
+        TweenService:Create(knob, TweenInfo.new(duration), {
+            Position = FeaturesState[configKey] and UDim2.new(1, -17, 0.5, -7) or UDim2.new(0, 3, 0.5, -7)
+        }):Play()
+    end
+
     btn.MouseButton1Click:Connect(function()
-        state = not state
-        TweenService:Create(toggleBg, TweenInfo.new(0.15), {
-            BackgroundColor3 = state and CONFIG.ToggleOn or CONFIG.ToggleOff
-        }):Play()
-        TweenService:Create(knob, TweenInfo.new(0.15), {
-            Position = state and UDim2.new(1, -17, 0.5, -7) or UDim2.new(0, 3, 0.5, -7)
-        }):Play()
-        if callback then callback(state) end
+        FeaturesState[configKey] = not FeaturesState[configKey]
+        updateVisuals(true)
+        if callback then callback(FeaturesState[configKey]) end
     end)
+
     btn.MouseEnter:Connect(function()
         TweenService:Create(row, TweenInfo.new(0.1), {BackgroundColor3 = CONFIG.BgItemHover}):Play()
     end)
     btn.MouseLeave:Connect(function()
         TweenService:Create(row, TweenInfo.new(0.1), {BackgroundColor3 = CONFIG.BgItem}):Play()
     end)
+
+    RegisteredToggles[configKey] = {
+        Set = function(newVal)
+            FeaturesState[configKey] = newVal
+            updateVisuals(false)
+            if callback then callback(newVal) end
+        end
+    }
     return row
 end
 
@@ -422,23 +543,16 @@ local function AddButton(parent, labelText, callback)
     arrow.ZIndex             = 9
     arrow.Parent             = row
 
-    row.MouseButton1Click:Connect(function()
-        if callback then callback() end
-    end)
-    row.MouseEnter:Connect(function()
-        TweenService:Create(row, TweenInfo.new(0.1), {BackgroundColor3 = CONFIG.BgItemHover}):Play()
-    end)
-    row.MouseLeave:Connect(function()
-        TweenService:Create(row, TweenInfo.new(0.1), {BackgroundColor3 = CONFIG.BgItem}):Play()
-    end)
+    row.MouseButton1Click:Connect(function() if callback then callback() end end)
+    row.MouseEnter:Connect(function() TweenService:Create(row, TweenInfo.new(0.1), {BackgroundColor3 = CONFIG.BgItemHover}):Play() end)
+    row.MouseLeave:Connect(function() TweenService:Create(row, TweenInfo.new(0.1), {BackgroundColor3 = CONFIG.BgItem}):Play() end)
     return row
 end
 
-local function AddSlider(parent, labelText, minVal, maxVal, defaultVal, callback)
+local function AddSlider(parent, configKey, labelText, minVal, maxVal, defaultVal, callback)
     minVal     = minVal or 0
     maxVal     = maxVal or 100
-    defaultVal = math.clamp(defaultVal or minVal, minVal, maxVal)
-    local value = defaultVal
+    FeaturesState[configKey] = math.clamp(defaultVal or minVal, minVal, maxVal)
 
     local wrapper = Instance.new("Frame")
     wrapper.Size             = UDim2.new(1, 0, 0, 54)
@@ -464,7 +578,7 @@ local function AddSlider(parent, labelText, minVal, maxVal, defaultVal, callback
     valLbl.Size               = UDim2.new(0, 50, 0, 22)
     valLbl.Position           = UDim2.new(1, -60, 0, 6)
     valLbl.BackgroundTransparency = 1
-    valLbl.Text               = tostring(defaultVal)
+    valLbl.Text               = tostring(FeaturesState[configKey])
     valLbl.TextColor3         = CONFIG.AccentColor
     valLbl.TextSize           = 12
     valLbl.Font               = Enum.Font.GothamBold
@@ -481,14 +595,19 @@ local function AddSlider(parent, labelText, minVal, maxVal, defaultVal, callback
     track.Parent           = wrapper
     Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
 
-    local ratio0 = (defaultVal - minVal) / (maxVal - minVal)
     local fill = Instance.new("Frame")
-    fill.Size             = UDim2.new(ratio0, 0, 1, 0)
     fill.BackgroundColor3 = CONFIG.AccentColor
     fill.BorderSizePixel  = 0
     fill.ZIndex           = 10
     fill.Parent           = track
     Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+
+    local function updateSliderVisual()
+        local ratio = (FeaturesState[configKey] - minVal) / (maxVal - minVal)
+        fill.Size = UDim2.new(ratio, 0, 1, 0)
+        valLbl.Text = tostring(FeaturesState[configKey])
+    end
+    updateSliderVisual()
 
     local hitbox = Instance.new("TextButton")
     hitbox.Size               = UDim2.new(1, 0, 0, 22)
@@ -503,17 +622,25 @@ local function AddSlider(parent, labelText, minVal, maxVal, defaultVal, callback
     UserInputService.InputEnded:Connect(function(i)
         if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
     end)
+
     RunService.Heartbeat:Connect(function()
         if not dragging then return end
         local mX    = UserInputService:GetMouseLocation().X
         local aPos  = track.AbsolutePosition.X
         local aSize = track.AbsoluteSize.X
         local r     = math.clamp((mX - aPos) / aSize, 0, 1)
-        value       = math.floor(minVal + r * (maxVal - minVal))
-        fill.Size   = UDim2.new(r, 0, 1, 0)
-        valLbl.Text = tostring(value)
-        if callback then callback(value) end
+        FeaturesState[configKey] = math.floor(minVal + r * (maxVal - minVal))
+        updateSliderVisual()
+        if callback then callback(FeaturesState[configKey]) end
     end)
+
+    RegisteredToggles[configKey] = {
+        Set = function(newVal)
+            FeaturesState[configKey] = math.clamp(newVal, minVal, maxVal)
+            updateSliderVisual()
+            if callback then callback(FeaturesState[configKey]) end
+        end
+    }
     return wrapper
 end
 
@@ -525,9 +652,7 @@ local TabButtons = {}
 local ActiveTab  = nil
 
 local function SwitchTab(tabName)
-    for name, page in pairs(TabPages) do
-        page.Visible = (name == tabName)
-    end
+    for name, page in pairs(TabPages) do page.Visible = (name == tabName) end
     for name, btn in pairs(TabButtons) do
         if name == tabName then
             btn.BackgroundTransparency = 0
@@ -561,20 +686,14 @@ for i, tab in ipairs(TABS) do
     TabPages[tab.Name]   = page
     TabButtons[tab.Name] = tabBtn
 
-    tabBtn.MouseButton1Click:Connect(function()
-        SwitchTab(tab.Name)
-    end)
+    tabBtn.MouseButton1Click:Connect(function() SwitchTab(tab.Name) end)
     tabBtn.MouseEnter:Connect(function()
         if ActiveTab ~= tab.Name then
             tabBtn.BackgroundTransparency = 0
             tabBtn.BackgroundColor3       = Color3.fromRGB(28, 28, 35)
         end
     end)
-    tabBtn.MouseLeave:Connect(function()
-        if ActiveTab ~= tab.Name then
-            tabBtn.BackgroundTransparency = 1
-        end
-    end)
+    tabBtn.MouseLeave:Connect(function() if ActiveTab ~= tab.Name then tabBtn.BackgroundTransparency = 1 end end)
 end
 
 SwitchTab(TABS[1].Name)
@@ -587,128 +706,206 @@ SwitchTab(TABS[1].Name)
 do
     local p = TabPages["Visual"]
     AddSectionHeader(p, "VISUALS")
-    AddToggle(p, "Random Feature 1", false, function(v)
-        -- TAMBAH SCRIPT FITUR 1 DI SINI
-    end)
-    AddToggle(p, "Random Feature 2", false, function(v)
-        -- TAMBAH SCRIPT FITUR 2 DI SINI
-    end)
-    AddToggle(p, "Random Feature 3", false, function(v)
-        -- TAMBAH SCRIPT FITUR 3 DI SINI
-    end)
+    AddToggle(p, "Visual1", "Random Feature 1", false, function(v) end)
+    AddToggle(p, "Visual2", "Random Feature 2", false, function(v) end)
+    AddToggle(p, "Visual3", "Random Feature 3", false, function(v) end)
     AddSectionHeader(p, "APPEARANCE")
-    AddSlider(p, "Random Slider 1", 0, 100, 50, function(v)
-        -- TAMBAH SCRIPT SLIDER 1 DI SINI
-    end)
+    AddSlider(p, "VisualSlider", "Random Slider 1", 0, 100, 50, function(v) end)
 end
 
 -- ====== KILLER =============================================
 do
     local p = TabPages["Killer"]
     AddSectionHeader(p, "KILLER OPTIONS")
-    AddToggle(p, "Random Feature 4", false, function(v)
-        -- TAMBAH SCRIPT FITUR 4 DI SINI
-    end)
-    AddToggle(p, "Random Feature 5", false, function(v)
-        -- TAMBAH SCRIPT FITUR 5 DI SINI
-    end)
-    AddButton(p, "Random Button 1", function()
-        -- TAMBAH SCRIPT BUTTON 1 DI SINI
-    end)
-    AddSlider(p, "Random Slider 2", 1, 10, 1, function(v)
-        -- TAMBAH SCRIPT SLIDER 2 DI SINI
-    end)
+    AddToggle(p, "Killer1", "Random Feature 4", false, function(v) end)
+    AddToggle(p, "Killer2", "Random Feature 5", false, function(v) end)
+    AddButton(p, "Random Button 1", function() end)
+    AddSlider(p, "KillerSlider", "Random Slider 2", 1, 10, 1, function(v) end)
 end
 
 -- ====== SURVIVOR ===========================================
 do
     local p = TabPages["Survivor"]
     AddSectionHeader(p, "SURVIVOR OPTIONS")
-    AddToggle(p, "Random Feature 6", false, function(v)
-        -- TAMBAH SCRIPT FITUR 6 DI SINI
-    end)
-    AddToggle(p, "Random Feature 7", false, function(v)
-        -- TAMBAH SCRIPT FITUR 7 DI SINI
-    end)
-    AddButton(p, "Random Button 2", function()
-        -- TAMBAH SCRIPT BUTTON 2 DI SINI
-    end)
+    AddToggle(p, "Survivor1", "Random Feature 6", false, function(v) end)
+    AddToggle(p, "Survivor2", "Random Feature 7", false, function(v) end)
+    AddButton(p, "Random Button 2", function() end)
 end
 
 -- ====== TELEPORT ===========================================
 do
     local p = TabPages["Teleport"]
     AddSectionHeader(p, "LOCATIONS")
-    AddButton(p, "Random Teleport 1", function()
-        -- TAMBAH SCRIPT TELEPORT 1 DI SINI
-        -- Contoh: LocalPlayer.Character:MoveTo(Vector3.new(0, 5, 0))
-    end)
-    AddButton(p, "Random Teleport 2", function()
-        -- TAMBAH SCRIPT TELEPORT 2 DI SINI
-    end)
-    AddButton(p, "Random Teleport 3", function()
-        -- TAMBAH SCRIPT TELEPORT 3 DI SINI
-    end)
+    AddButton(p, "Random Teleport 1", function() end)
+    AddButton(p, "Random Teleport 2", function() end)
+    AddButton(p, "Random Teleport 3", function() end)
 end
 
 -- ====== MISC ===============================================
 do
     local p = TabPages["Misc"]
     AddSectionHeader(p, "MISC")
-    AddToggle(p, "Random Feature 8", false, function(v)
-        -- TAMBAH SCRIPT FITUR 8 DI SINI
-    end)
-    AddToggle(p, "Random Feature 9", false, function(v)
-        -- TAMBAH SCRIPT FITUR 9 DI SINI
-    end)
-    AddButton(p, "Random Button 3", function()
-        -- TAMBAH SCRIPT BUTTON 3 DI SINI
-    end)
-    AddSlider(p, "Random Slider 3", 0, 200, 16, function(v)
-        -- TAMBAH SCRIPT SLIDER 3 DI SINI
-    end)
+    AddToggle(p, "Misc1", "Random Feature 8", false, function(v) end)
+    AddToggle(p, "Misc2", "Random Feature 9", false, function(v) end)
+    AddButton(p, "Random Button 3", function() end)
+    AddSlider(p, "MiscSlider", "Random Slider 3", 0, 200, 16, function(v) end)
 end
 
--- ====== SETTINGS ===========================================
+-- ====== SETTINGS (PERFORMANCE & CONFIG CORE) ================
 do
     local p = TabPages["Settings"]
     AddSectionHeader(p, "PERFORMANCE")
-    AddToggle(p, "Random Setting 1", false, function(v)
-        -- TAMBAH SCRIPT SETTING 1 DI SINI
+    
+    -- Feature: Reduce Lag
+    AddToggle(p, "ReduceLag", "Reduce Lag", false, function(state)
+        if state then
+            settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+            Lighting.GlobalShadows = false
+            Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
+            for _, v in ipairs(game:GetDescendants()) do
+                if v:IsA("Part") or v:IsA("MeshPart") or v:IsA("UnionOperation") then
+                    v.Material = Enum.Material.SmoothPlastic
+                    v.CastShadow = false
+                elseif v:IsA("ParticleEmitter") or v:IsA("Smoke") or v:IsA("Fire") then
+                    v.Enabled = false
+                end
+            end
+        else
+            Lighting.GlobalShadows = true
+            -- Mengembalikan ke default bawaan game jika dimatikan
+            for _, v in ipairs(game:GetDescendants()) do
+                if v:IsA("Part") or v:IsA("MeshPart") then
+                    v.Material = Enum.Material.Plastic
+                end
+            end
+        end
     end)
+    
+    -- Feature: White White Screen (Optimize CPU/RAM Engine)
+    local ccEffect = Lighting:FindFirstChild("DScript_WhiteScreen")
+    AddToggle(p, "WhiteScreen", "White White Screen", false, function(state)
+        if state then
+            if not ccEffect then
+                ccEffect = Instance.new("ColorCorrectionEffect")
+                ccEffect.Name = "DScript_WhiteScreen"
+                ccEffect.Brightness = 1
+                ccEffect.Contrast = 0
+                ccEffect.Saturation = -1
+                ccEffect.TintColor = Color3.fromRGB(255, 255, 255)
+                ccEffect.Parent = Lighting
+            end
+            ccEffect.Enabled = true
+            
+            -- Membatasi render frame internal jika aplikasi di-minimize (mengurangi penggunaan hardware)
+            if setfpscap then setfpscap(15) end
+        else
+            if ccEffect then ccEffect.Enabled = false end
+            if setfpscap then setfpscap(60) end
+        end
+    end)
+    
     AddSectionHeader(p, "CONFIGURATION")
+    
+    -- Action: Save Config
     AddButton(p, "Save Config", function()
-        -- TAMBAH SCRIPT SAVE CONFIG DI SINI
-        print("[DScriptHUB] Config saved!")
+        CreatePopupPrompt("SIMPAN KONFIGURASI", false, nil, function(configName)
+            local fileName = "DScriptHUB_" .. configName .. ".json"
+            local success, jsonStr = pcall(function()
+                return game:GetService("HttpService"):JSONEncode(FeaturesState)
+            end)
+            if success and writefile then
+                writefile(fileName, jsonStr)
+                print("[DScriptHUB] Config '"..configName.."' berhasil disimpan!")
+            else
+                print("[DScriptHUB] Gagal menyimpan file config (Pastikan Executor mendukung writefile)")
+            end
+        end)
     end)
+    
+    -- Action: Load Config
     AddButton(p, "Load Config", function()
-        -- TAMBAH SCRIPT LOAD CONFIG DI SINI
+        if not listfiles then 
+            print("[DScriptHUB] Executor kamu tidak mendukung pembacaan direktori file.")
+            return 
+        end
+        
+        local allFiles = listfiles("")
+        local configFiles = {}
+        for _, file in ipairs(allFiles) do
+            if string.match(file, "^DScriptHUB_.*%.json$") or string.match(file, "DScriptHUB_") then
+                local cleanName = string.gsub(file, "DScriptHUB_", "")
+                cleanName = string.gsub(cleanName, "%.json", "")
+                table.insert(configFiles, cleanName)
+            end
+        end
+        
+        if #configFiles == 0 then
+            print("[DScriptHUB] Tidak ada konfigurasi tersimpan ditemukan.")
+            return
+        end
+        
+        CreatePopupPrompt("PILIH KONFIGURASI", true, configFiles, function(selectedConfig)
+            local fileName = "DScriptHUB_" .. selectedConfig .. ".json"
+            if readfile and isfile(fileName) then
+                local data = readfile(fileName)
+                local success, decoded = pcall(function() return game:GetService("HttpService"):JSONDecode(data) end)
+                if success and decoded then
+                    for k, v in pairs(decoded) do
+                        if RegisteredToggles[k] then
+                            RegisteredToggles[k].Set(v)
+                        end
+                    end
+                    print("[DScriptHUB] Konfigurasi '" .. selectedConfig .. "' berhasil dimuat!")
+                end
+            end
+        end)
     end)
+    
+    -- Action: Reset to Default
     AddButton(p, "Reset to Default", function()
-        -- TAMBAH SCRIPT RESET DI SINI
+        for k, _ in pairs(FeaturesState) do
+            if RegisteredToggles[k] then
+                if string.find(k, "Slider") then
+                    RegisteredToggles[k].Set(k == "VisualSlider" and 50 or (k == "MiscSlider" and 16 or 1))
+                else
+                    RegisteredToggles[k].Set(false)
+                end
+            end
+        end
+        print("[DScriptHUB] Pengaturan dikembalikan ke awal!")
     end)
 end
 
 -- ============================================================
--- DRAG MAIN FRAME (dari title bar)
+-- DRAG MAIN FRAME (Menggunakan RenderStepped Agar Sangat Halus)
 -- ============================================================
 do
-    local dragging, dragStart, startPos
+    local dragging = false
+    local dragInput, dragStart, startPos
+
     TitleBar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging  = true
+            dragging = true
             dragStart = input.Position
-            startPos  = MainFrame.Position
+            startPos = MainFrame.Position
+            
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
         end
     end)
-    TitleBar.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
+
+    TitleBar.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then
+            dragInput = input
         end
     end)
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            local delta = input.Position - dragStart
+
+    RunService.RenderStepped:Connect(function()
+        if dragging and dragInput then
+            local delta = dragInput.Position - dragStart
             MainFrame.Position = UDim2.new(
                 startPos.X.Scale, startPos.X.Offset + delta.X,
                 startPos.Y.Scale, startPos.Y.Offset + delta.Y
@@ -718,7 +915,7 @@ do
 end
 
 -- ============================================================
--- CLOSE / MINIMIZE / FLOATING
+-- CLOSE / MINIMIZE / FLOATING SYSTEM
 -- ============================================================
 local function ShowFloat()
     MainFrame.Visible = false
@@ -734,24 +931,34 @@ CloseBtn.MouseButton1Click:Connect(ShowFloat)
 MinimizeBtn.MouseButton1Click:Connect(ShowFloat)
 FloatBtn.MouseButton1Click:Connect(ShowMain)
 
--- Drag floating button
+-- Drag Floating Button (RenderStepped Optimized)
 do
-    local dragging, dragStart, startPos
+    local dragging = false
+    local dragInput, dragStart, startPos
+
     FloatBtn.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging  = true
+            dragging = true
             dragStart = input.Position
-            startPos  = FloatBtn.Position
+            startPos = FloatBtn.Position
+            
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
         end
     end)
-    FloatBtn.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
+
+    FloatBtn.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then
+            dragInput = input
         end
     end)
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            local delta = input.Position - dragStart
+
+    RunService.RenderStepped:Connect(function()
+        if dragging and dragInput then
+            local delta = dragInput.Position - dragStart
             FloatBtn.Position = UDim2.new(
                 startPos.X.Scale, startPos.X.Offset + delta.X,
                 startPos.Y.Scale, startPos.Y.Offset + delta.Y
