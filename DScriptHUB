@@ -688,74 +688,25 @@ do
     AddButton(p, "Teleport to My Garden", function() end)
 end
 
--- ====== TAB: MISC (WITH DISCORD WEBHOOK) ====================
+-- ====== TAB: MISC (DENGAN TOMBOL SHOW CONSOLE) =======
 do
     local p = TabPages["Misc"]
-    AddSectionHeader(p, "DISCORD NOTIFIER")
     
-    -- Pembuatan input Textbox untuk URL Webhook
-    local webRow = Instance.new("Frame")
-    webRow.Size = UDim2.new(1, 0, 0, 45)
-    webRow.BackgroundColor3 = CONFIG.BgItem
-    webRow.Parent = p
-    Instance.new("UICorner", webRow).CornerRadius = UDim.new(0, 7)
+    AddSectionHeader(p, "UTILITY TOOLS")
     
-    local webBox = Instance.new("TextBox")
-    webBox.Size = UDim2.new(1, -20, 1, -10)
-    webBox.Position = UDim2.new(0, 10, 0, 5)
-    webBox.BackgroundTransparency = 1
-    webBox.PlaceholderText = "Paste Discord Webhook URL di sini..."
-    webBox.PlaceholderColor3 = CONFIG.TextSecondary
-    webBox.Text = FeaturesState.DiscordWebhookURL
-    webBox.TextColor3 = CONFIG.TextPrimary
-    webBox.Font = Enum.Font.Gotham
-    webBox.TextSize = 11
-    webBox.TextXAlignment = Enum.TextXAlignment.Left
-    webBox.Parent = webRow
-    
-    webBox.FocusLost:Connect(function()
-        FeaturesState.DiscordWebhookURL = webBox.Text
+    -- Tombol untuk memunculkan Developer Console di Emulator/HP
+    AddButton(p, "Open Developer Console", function()
+        pcall(function()
+            game:GetService("StarterGui"):SetCore("DevConsoleVisible", true)
+        end)
     end)
     
-    -- Fungsi kirim data JSON ke Webhook Discord
-    local function SendDiscordMessage(msg)
-        local url = FeaturesState.DiscordWebhookURL
-        if url == "" or not string.match(url, "^https://discord%.com/api/webhooks/") then
-            print("[DScriptHUB] URL Webhook tidak valid!")
-            return
-        end
-        
-        local payload = HttpService:JSONEncode({
-            username = "DScriptHUB Notifier",
-            content = msg
-        })
-        
-        -- Menggunakan request exploit standard executor
-        local req = syn and syn.request or http and http.request or http_request or request
-        if req then
-            req({
-                Url = url,
-                Method = "POST",
-                Headers = {["Content-Type"] = "application/json"},
-                Body = payload
-            })
-            print("[DScriptHUB] Test Webhook Terkirim!")
-        else
-            print("[DScriptHUB] Executor kamu tidak mendukung Http Request.")
-        end
-    end
-    
-    AddButton(p, "Test Send Webhook", function()
-        SendDiscordMessage("🔔 **[DScriptHUB Info]** Webhook terhubung sukses dari game Grow a Garden 2! Player: " .. LocalPlayer.Name)
+    -- Kamu bisa menambahkan fitur misc lainnya di bawah sini
+    AddButton(p, "Rejoin Server", function()
+        local TeleportService = game:GetService("TeleportService")
+        local Players = game:GetService("Players")
+        TeleportService:Teleport(game.PlaceId, Players.LocalPlayer)
     end)
-    
-    -- Sinkronisasi value config load ke textbox visual
-    RegisteredToggles["DiscordWebhookURL"] = {
-        Set = function(newVal)
-            FeaturesState.DiscordWebhookURL = newVal
-            webBox.Text = newVal
-        end
-    }
 end
 
 -- ====== TAB: SETTINGS =======================================
