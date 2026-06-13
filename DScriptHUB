@@ -1,570 +1,92 @@
 -- ============================================================
--- DSCRIPTHUB - FULL UPDATED SCRIPT (FIX BUG & ANTI-DUPLICATE)
+-- MULTI-ACCOUNT DETECTOR & SERVER HOPPER (AUTO-EXECUTE)
 -- ============================================================
 
--- 1. SYSTEM CLEANUP (Mematikan script lama sampai ke akarnya)
-if _G.DScriptHUBCleanup then
-    local success, err = pcall(_G.DScriptHUBCleanup)
-    if not success then warn("[DScriptHUB] Gagal membersihkan script lama: ", err) end
-end
-
--- 2. DEFINE CORE SERVICES & VARIABLES
-local Players         = game:GetService("Players")
-local RunService      = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local StarterGui      = game:GetService("StarterGui")
-local TweenService    = game:GetService("TweenService")
-
-local LocalPlayer     = Players.LocalPlayer
-local PlayerGui       = LocalPlayer:WaitForChild("PlayerGui")
-
--- Membersihkan ScreenGui lama di PlayerGui
-if PlayerGui:FindFirstChild("DScriptHUB") then
-    PlayerGui:FindFirstChild("DScriptHUB"):Destroy()
-end
-
--- Janitor untuk mencatat koneksi agar tidak dobel saat re-execute
-local JanitorConnections = {}
-local function TrackConnection(conn)
-    table.insert(JanitorConnections, conn)
-    return conn
-end
-
-_G.DScriptHUBCleanup = function()
-    for _, conn in ipairs(JanitorConnections) do
-        if conn and conn.Connected then
-            conn:Disconnect()
-        end
-    end
-    table.clear(JanitorConnections)
-    _G.DScriptHUBCleanup = nil
-    print("[DScriptHUB] Pembersihan total berhasil dilakukan!")
-end
-
--- 3. CONFIGURATION & THEME COLOR
-local CONFIG = {
-    BgColor        = Color3.fromRGB(20, 23, 20),
-    SidebarColor   = Color3.fromRGB(13, 15, 13),
-    AccentColor    = Color3.fromRGB(46, 204, 113), -- Hijau DScript
-    TextPrimary    = Color3.fromRGB(255, 255, 255),
-    TextSecondary  = Color3.fromRGB(160, 165, 160),
-    ButtonColor    = Color3.fromRGB(30, 35, 30),
+-- 1. DAFTAR NAMA AKUN KAMU (Sesuaikan dengan nama akun di RAM)
+-- Tulis persis sesuai Username Roblox (bukan Display Name)
+local MyAccountList = {
+    "Kryton8301",
+    "Makzo154",
+    "Zildjan792",
+    "Vandame582",
+    "Xavier395",
+    "Braxton6103",
+    "Kenzho9278",
+    "Dextro5384",
+    "dimas123" -- Tambahkan nama akun lainnya di sini
 }
 
--- 4. BASE UI CREATION (ScreenGui & Main Frame)
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "DScriptHUB"
-ScreenGui.ResetOnSpawn = false
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-ScreenGui.Parent = PlayerGui
-
-local MainFrame = Instance.new("Frame")
-MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 550, 0, 380)
-MainFrame.Position = UDim2.new(0.5, -275, 0.5, -190)
-MainFrame.BackgroundColor3 = CONFIG.BgColor
-MainFrame.BorderSizePixel = 0
-MainFrame.Active = true
-MainFrame.Draggable = true -- Memudahkan geser UI di Emulator
-MainFrame.Parent = ScreenGui
-Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 8)
-
--- 5. SIDEBAR DESIGN
-local Sidebar = Instance.new("Frame")
-Sidebar.Name = "Sidebar"
-Sidebar.Size = UDim2.new(0, 150, 1, 0)
-Sidebar.BackgroundColor3 = CONFIG.SidebarColor
-Sidebar.BorderSizePixel = 0
-Sidebar.Parent = MainFrame
-local SidebarCorner = Instance.new("UICorner", Sidebar)
-SidebarCorner.CornerRadius = UDim.new(0, 8)
-
--- Title HUB
-local HubTitle = Instance.new("TextLabel")
-HubTitle.Size = UDim2.new(1, 0, 0, 40)
-HubTitle.Position = UDim2.new(0, 12, 0, 5)
-HubTitle.BackgroundTransparency = 1
-HubTitle.Text = "<font color='#2ecc71'>DScript</font>HUB"
-HubTitle.RichText = true
-HubTitle.TextColor3 = CONFIG.TextPrimary
-HubTitle.Font = Enum.Font.GothamBold
-HubTitle.TextSize = 16
-HubTitle.TextXAlignment = Enum.TextXAlignment.Left
-HubTitle.Parent = Sidebar
-
-local GameTitle = Instance.new("TextLabel")
-GameTitle.Size = UDim2.new(1, 0, 0, 20)
-GameTitle.Position = UDim2.new(0, 12, 0, 25)
-GameTitle.BackgroundTransparency = 1
-GameTitle.Text = "Grow a Garden 2"
-GameTitle.TextColor3 = CONFIG.TextSecondary
-GameTitle.Font = Enum.Font.Gotham
-GameTitle.TextSize = 11
-GameTitle.TextXAlignment = Enum.TextXAlignment.Left
-GameTitle.Parent = Sidebar
-
--- Navigation Button Container
-local NavContainer = Instance.new("ScrollingFrame")
-NavContainer.Size = UDim2.new(1, -10, 1, -120)
-NavContainer.Position = UDim2.new(0, 5, 0, 60)
-NavContainer.BackgroundTransparency = 1
-NavContainer.CanvasSize = UDim2.new(0, 0, 0, 0)
-NavContainer.ScrollBarThickness = 2
-NavContainer.Parent = Sidebar
-local NavLayout = Instance.new("UIListLayout", NavContainer)
-NavLayout.Padding = UDim.new(0, 4)
-
--- Content Pages Container
-local ContentContainer = Instance.new("Frame")
-ContentContainer.Size = UDim2.new(1, -160, 1, -50)
-ContentContainer.Position = UDim2.new(0, 155, 0, 45)
-ContentContainer.BackgroundTransparency = 1
-ContentContainer.Parent = MainFrame
-
--- Topbar Window Controls (Minimize / Close / Search placeholder)
-local SearchBox = Instance.new("TextBox")
-SearchBox.Size = UDim2.new(0, 130, 0, 26)
-SearchBox.Position = UDim2.new(0, 10, 0, 10)
-SearchBox.BackgroundColor3 = CONFIG.ButtonColor
-SearchBox.BorderSizePixel = 0
-SearchBox.Text = ""
-SearchBox.PlaceholderText = "Search..."
-SearchBox.PlaceholderColor3 = CONFIG.TextSecondary
-SearchBox.TextColor3 = CONFIG.TextPrimary
-SearchBox.Font = Enum.Font.Gotham
-SearchBox.TextSize = 12
-SearchBox.Parent = Sidebar
-Instance.new("UICorner", SearchBox).CornerRadius = UDim.new(0, 6)
-
--- 6. DYNAMIC UI CREATION HELPERS
-local TabPages = {}
-local FirstTab = true
-
-local function CreateTab(tabName)
-    -- Button Sidebar
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, 0, 0, 32)
-    btn.BackgroundColor3 = CONFIG.ButtonColor
-    btn.BackgroundTransparency = 1
-    btn.BorderSizePixel = 0
-    btn.Text = "  " .. tabName
-    btn.TextColor3 = CONFIG.TextSecondary
-    btn.Font = Enum.Font.Gotham
-    btn.TextSize = 12
-    btn.TextXAlignment = Enum.TextXAlignment.Left
-    btn.Parent = NavContainer
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+-- 2. FUNGSI UNTUK MELAKUKAN SERVER HOPPING AMAN
+local function ServerHop()
+    print("[Hopper] Mendeteksi akun tim! Mencari server baru...")
+    local HttpService = game:GetService("HttpService")
+    local TeleportService = game:GetService("TeleportService")
+    local LocalPlayer = game:GetService("Players").LocalPlayer
     
-    -- Page Content View
-    local page = Instance.new("ScrollingFrame")
-    page.Size = UDim2.new(1, 0, 1, 0)
-    page.BackgroundTransparency = 1
-    page.Visible = false
-    page.CanvasSize = UDim2.new(0, 0, 0, 0)
-    page.ScrollBarThickness = 4
-    page.Parent = ContentContainer
-    
-    local pageLayout = Instance.new("UIListLayout", page)
-    pageLayout.Padding = UDim.new(0, 6)
-    pageLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    
-    pageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        page.CanvasSize = UDim2.new(0, 0, 0, pageLayout.AbsoluteContentSize.Y + 15)
+    -- Mengambil daftar server publik acak dari API Roblox
+    local success, result = pcall(function()
+        local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+        return HttpService:JSONDecode(game:HttpGet(url))
     end)
     
-    -- Tab Switching Logic
-    btn.MouseButton1Click:Connect(function()
-        for _, p in pairs(TabPages) do p.Visible = false end
-        for _, b in ipairs(NavContainer:GetChildren()) do
-            if b:IsA("TextButton") then 
-                b.TextColor3 = CONFIG.TextSecondary
-                b.BackgroundTransparency = 1
+    if success and result and result.data then
+        for _, server in ipairs(result.data) do
+            -- Cari server yang masih muat dan bukan server saat ini
+            if server.id ~= game.JobId and server.playing < server.maxPlayers then
+                pcall(function()
+                    TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, LocalPlayer)
+                end)
+                task.wait(2) -- Jeda penahan agar tidak spamming jika proses teleport delay
             end
         end
-        page.Visible = true
-        btn.TextColor3 = CONFIG.AccentColor
-        btn.BackgroundTransparency = 0.8
-    end)
-    
-    if FirstTab then
-        page.Visible = true
-        btn.TextColor3 = CONFIG.AccentColor
-        btn.BackgroundTransparency = 0.8
-        FirstTab = false
-    end
-    
-    TabPages[tabName] = page
-    return page
-end
-
-local function AddSectionHeader(parentPage, titleText)
-    local header = Instance.new("TextLabel")
-    header.Size = UDim2.new(0, 360, 0, 25)
-    header.BackgroundTransparency = 1
-    header.Text = titleText
-    header.TextColor3 = CONFIG.AccentColor
-    header.Font = Enum.Font.GothamBold
-    header.TextSize = 11
-    header.TextXAlignment = Enum.TextXAlignment.Left
-    header.Parent = parentPage
-end
-
-local function AddToggle(parentPage, configKey, text, default, callback)
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 370, 0, 38)
-    frame.BackgroundColor3 = CONFIG.ButtonColor
-    frame.BorderSizePixel = 0
-    frame.Parent = parentPage
-    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 6)
-    
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, -60, 1, 0)
-    label.Position = UDim2.new(0, 12, 0, 0)
-    label.BackgroundTransparency = 1
-    label.Text = text
-    label.TextColor3 = CONFIG.TextPrimary
-    label.Font = Enum.Font.Gotham
-    label.TextSize = 13
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Parent = frame
-    
-    local bgToggle = Instance.new("TextButton")
-    bgToggle.Size = UDim2.new(0, 42, 0, 22)
-    bgToggle.Position = UDim2.new(1, -54, 0.5, -11)
-    bgToggle.BackgroundColor3 = default and CONFIG.AccentColor or Color3.fromRGB(60, 65, 60)
-    bgToggle.Text = ""
-    bgToggle.Parent = frame
-    Instance.new("UICorner", bgToggle).CornerRadius = UDim.new(1, 0)
-    
-    local ball = Instance.new("Frame")
-    ball.Size = UDim2.new(0, 16, 0, 16)
-    ball.Position = default and UDim2.new(1, -19, 0.5, -8) or UDim2.new(0, 3, 0.5, -8)
-    ball.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    ball.Parent = bgToggle
-    Instance.new("UICorner", ball).CornerRadius = UDim.new(1, 0)
-    
-    local state = default
-    bgToggle.MouseButton1Click:Connect(function()
-        state = not state
-        TweenService:Create(ball, TweenInfo.new(0.2), {Position = state and UDim2.new(1, -19, 0.5, -8) or UDim2.new(0, 3, 0.5, -8)}):Play()
-        TweenService:Create(bgToggle, TweenInfo.new(0.2), {BackgroundColor3 = state and CONFIG.AccentColor or Color3.fromRGB(60, 65, 60)}):Play()
-        callback(state)
-    end)
-end
-
-local function AddSlider(parentPage, configKey, text, min, max, default, callback)
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 370, 0, 45)
-    frame.BackgroundColor3 = CONFIG.ButtonColor
-    frame.Parent = parentPage
-    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 6)
-    
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, -80, 0, 20)
-    label.Position = UDim2.new(0, 12, 0, 4)
-    label.BackgroundTransparency = 1
-    label.Text = text
-    label.TextColor3 = CONFIG.TextPrimary
-    label.Font = Enum.Font.Gotham
-    label.TextSize = 12
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Parent = frame
-    
-    local valLabel = Instance.new("TextLabel")
-    valLabel.Size = UDim2.new(0, 60, 0, 20)
-    valLabel.Position = UDim2.new(1, -72, 0, 4)
-    valLabel.BackgroundTransparency = 1
-    valLabel.Text = tostring(default)
-    valLabel.TextColor3 = CONFIG.AccentColor
-    valLabel.Font = Enum.Font.GothamBold
-    valLabel.TextSize = 12
-    valLabel.TextXAlignment = Enum.TextXAlignment.Right
-    valLabel.Parent = frame
-    
-    local sliderBg = Instance.new("TextButton")
-    sliderBg.Size = UDim2.new(1, -24, 0, 4)
-    sliderBg.Position = UDim2.new(0, 12, 0, 30)
-    sliderBg.BackgroundColor3 = Color3.fromRGB(60, 65, 60)
-    sliderBg.Text = ""
-    sliderBg.Parent = frame
-    
-    local sliderFill = Instance.new("Frame")
-    sliderFill.Size = UDim2.new((default - min)/(max - min), 0, 1, 0)
-    sliderFill.BackgroundColor3 = CONFIG.AccentColor
-    sliderFill.BorderSizePixel = 0
-    sliderFill.Parent = sliderBg
-    
-    local active = false
-    local function updateSlider(input)
-        local pos = math.clamp((input.Position.X - sliderBg.AbsolutePosition.X) / sliderBg.AbsoluteSize.X, 0, 1)
-        sliderFill.Size = UDim2.new(pos, 0, 1, 0)
-        local value = math.floor(min + (max - min) * pos)
-        valLabel.Text = tostring(value)
-        callback(value)
-    end
-    
-    sliderBg.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            active = true
-            updateSlider(input)
-        end
-    end)
-    
-    TrackConnection(UserInputService.InputChanged:Connect(function(input)
-        if active and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            updateSlider(input)
-        end
-    end))
-    
-    TrackConnection(UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            active = false
-        end
-    end))
-end
-
-local function AddButton(parentPage, text, callback)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 370, 0, 34)
-    btn.BackgroundColor3 = CONFIG.ButtonColor
-    btn.BorderSizePixel = 0
-    btn.Text = text
-    btn.TextColor3 = CONFIG.TextPrimary
-    btn.Font = Enum.Font.GothamMedium
-    btn.TextSize = 13
-    btn.Parent = parentPage
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
-    
-    btn.MouseButton1Click:Connect(callback)
-end
-
--- ============================================================
--- INITIALIZE TABS
--- ============================================================
-CreateTab("Main")
-CreateTab("Shop")
-CreateTab("Auto")
-CreateTab("Teleport")
-CreateTab("Misc")
-CreateTab("Settings")
-
--- ============================================================
--- IMPLEMENTASI TAB: TELEPORT (WITH FULL REFIX FLY MECHANIC)
--- ============================================================
-do
-    local p = TabPages["Teleport"]
-    
-    local FlyState = {
-        Active = false,
-        Speed = 50,
-        ControlState = {W = 0, S = 0, A = 0, D = 0, Up = 0, Down = 0}
-    }
-    
-    local Camera = workspace.CurrentCamera
-    local FlyConnection
-    
-    local function StartFlying()
-        local Character = LocalPlayer.Character
-        if not Character then return end
-        local Root = Character:FindFirstChild("HumanoidRootPart")
-        local Humanoid = Character:FindFirstChildOfClass("Humanoid")
-        if not Root or not Humanoid then return end
-        
-        Humanoid.PlatformStand = true
-        
-        local BV = Instance.new("BodyVelocity")
-        BV.Name = "DScript_FlyBV"
-        BV.MaxForce = Vector3.new(1e5, 1e5, 1e5)
-        BV.Velocity = Vector3.new(0, 0, 0)
-        BV.Parent = Root
-        
-        local BG = Instance.new("BodyGyro")
-        BG.Name = "DScript_FlyBG"
-        BG.MaxTorque = Vector3.new(1e5, 1e5, 1e5)
-        BG.CFrame = Root.CFrame
-        BG.Parent = Root
-        
-        FlyConnection = RunService.RenderStepped:Connect(function()
-            if not Root or not Root.Parent or not FlyState.Active then return end
-            BG.CFrame = Camera.CFrame
-            
-            local DriveVector = Vector3.new(
-                FlyState.ControlState.A + FlyState.ControlState.D, 
-                FlyState.ControlState.Up + FlyState.ControlState.Down, 
-                FlyState.ControlState.W + FlyState.ControlState.S
-            )
-            
-            if DriveVector.Magnitude > 0 then
-                local CameraCFrame = Camera.CFrame
-                -- FIX: Tanda minus (-) pada LookVector membalikkan arah sumbu Z agar W = Maju, S = Mundur
-                local MoveDirection = (CameraCFrame.RightVector * DriveVector.X) 
-                                    + (CameraCFrame.UpVector * DriveVector.Y) 
-                                    + (CameraCFrame.LookVector * (-DriveVector.Z))
-                
-                BV.Velocity = MoveDirection.Unit * FlyState.Speed
-            else
-                BV.Velocity = Vector3.new(0, 0, 0)
-            end
-        end)
-        TrackConnection(FlyConnection)
-    end
-    
-    local function StopFlying()
-        if FlyConnection then FlyConnection:Disconnect(); FlyConnection = nil end
-        local Character = LocalPlayer.Character
-        if Character then
-            local Root = Character:FindFirstChild("HumanoidRootPart")
-            local Humanoid = Character:FindFirstChildOfClass("Humanoid")
-            if Root then
-                local oldBV = Root:FindFirstChild("DScript_FlyBV")
-                local oldBG = Root:FindFirstChild("DScript_FlyBG")
-                if oldBV then oldBV:Destroy() end
-                if oldBG then oldBG:Destroy() end
-            end
-            if Humanoid then Humanoid.PlatformStand = false end
-        end
-    end
-    
-    LocalPlayer.CharacterAdded:Connect(function()
-        if FlyState.Active then
-            task.wait(0.5)
-            if FlyState.Active then StartFlying() end
-        end
-    end)
-    
-    TrackConnection(UserInputService.InputBegan:Connect(function(input, gpe)
-        if gpe or not FlyState.Active then return end
-        local key = input.KeyCode
-        if key == Enum.KeyCode.W then FlyState.ControlState.S = -1
-        elseif key == Enum.KeyCode.S then FlyState.ControlState.W = 1
-        elseif key == Enum.KeyCode.A then FlyState.ControlState.D = -1
-        elseif key == Enum.KeyCode.D then FlyState.ControlState.A = 1
-        elseif key == Enum.KeyCode.Space then FlyState.ControlState.Up = 1
-        elseif key == Enum.KeyCode.LeftControl then FlyState.ControlState.Down = -1
-        end
-    end))
-    
-    TrackConnection(UserInputService.InputEnded:Connect(function(input)
-        local key = input.KeyCode
-        if key == Enum.KeyCode.W then FlyState.ControlState.S = 0
-        elseif key == Enum.KeyCode.S then FlyState.ControlState.W = 0
-        elseif key == Enum.KeyCode.A then FlyState.ControlState.D = 0
-        elseif key == Enum.KeyCode.D then FlyState.ControlState.A = 0
-        elseif key == Enum.KeyCode.Space then FlyState.ControlState.Up = 0
-        elseif key == Enum.KeyCode.LeftControl then FlyState.ControlState.Down = 0
-        end
-    end))
-    
-    AddSectionHeader(p, "MOVEMENT HACKS")
-    AddToggle(p, "FlyActive", "Enable Fly", false, function(state)
-        FlyState.Active = state
-        if state then StartFlying() else StopFlying() end
-    end)
-    
-    AddSlider(p, "FlySpeed", "Fly Speed", 10, 250, 50, function(value)
-        FlyState.Speed = value
-    end)
-    
-    AddSectionHeader(p, "TELEPORT SLOTS")
-    AddButton(p, "Teleport to Merchant", function() end)
-    AddButton(p, "Teleport to My Garden", function() end)
-end
-
--- ============================================================
--- IMPLEMENTASI TAB: AUTO (PLACEHOLDER FOR YOUR ASSIGNMENT)
--- ============================================================
-do
-    local p = TabPages["Auto"]
-    AddSectionHeader(p, "FARMS AUTOMATION")
-    AddToggle(p, "AutoFarm", "Auto Farm Money", false, function(state) end)
-    AddToggle(p, "AutoKill", "Auto Kill Pests / Bugs", false, function(state) end)
-    
-    AddSectionHeader(p, "WAITING FOR REMOTE SPY DATA...")
-    -- Begitu data remote spy kamu kirim, cetakan UI Dropdown & Auto Buy dimasukkan di sini!
-end
-
--- ============================================================
--- IMPLEMENTASI TAB: MISC (DENGAN EMULATOR DEVELOPER CONSOLE SHORTCUT)
--- ============================================================
-do
-    local p = TabPages["Misc"]
-    AddSectionHeader(p, "EMULATOR UTILITY")
-    
-    -- Mengatasi masalah F9 macet di MuMu Player
-    AddButton(p, "Open Developer Console (F9 Fix)", function()
+    else
+        -- Cadangan jika API Roblox sedang lag, gunakan sistem Hop standar
         pcall(function()
-            StarterGui:SetCore("DevConsoleVisible", true)
+            TeleportService:Teleport(game.PlaceId, LocalPlayer)
         end)
-    end)
+    end
+end
+
+-- 3. LOGIKA DETEKSI AKUN DI DALAM SERVER
+local function PeriksaServer()
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
     
-    AddButton(p, "Rejoin Server", function()
-        game:GetService("TeleportService"):Teleport(game.PlaceId, LocalPlayer)
-    end)
+    -- Menunggu sampai semua player selesai loading data dasarnya
+    task.wait(3) 
+    
+    for _, player in ipairs(Players:GetPlayers()) do
+        -- Pastikan script TIDAK mendeteksi dirinya sendiri
+        if player ~= LocalPlayer then
+            -- Mencocokkan nama player di server dengan daftar list kita
+            for _, targetName in ipairs(MyAccountList) do
+                if player.Name:lower() == targetName:lower() then
+                    print("[Hopper] AWAS! Akun " .. player.Name .. " ditemukan di server ini.")
+                    ServerHop()
+                    return true -- Menghentikan pengecekan karena sudah pasti Hop
+                end
+            end
+        end
+    end
+    print("[Hopper] Server Aman! Tidak ada akun tim lain di sini. Melanjutkan farm...")
+    return false
 end
 
--- ============================================================
--- AVATAR PANEL UPDATE (MENAMPILKAN GAMBAR ASLI AKUN ROBLOX)
--- ============================================================
-local AvatarFrame = Instance.new("Frame")
-AvatarFrame.Size             = UDim2.new(1, 0, 0, 46)
-AvatarFrame.Position         = UDim2.new(0, 0, 1, -46)
-AvatarFrame.BackgroundColor3 = Color3.fromRGB(0,0,0)
-AvatarFrame.BackgroundTransparency = 1 
-AvatarFrame.ZIndex           = 4
-AvatarFrame.Parent           = Sidebar
-
-local AvatarIcon = Instance.new("ImageLabel")
-AvatarIcon.Size             = UDim2.new(0, 32, 0, 32)
-AvatarIcon.Position         = UDim2.new(0, 10, 0.5, -16)
-AvatarIcon.BackgroundColor3 = Color3.fromRGB(30, 35, 30)
-AvatarIcon.BorderSizePixel   = 0
-AvatarIcon.ZIndex           = 5
-AvatarIcon.Parent           = AvatarFrame
-Instance.new("UICorner", AvatarIcon).CornerRadius = UDim.new(1, 0)
-
--- Fetch Pfp menggunakan pcall aman agar UI tidak macet total jika API Roblox melambat
-local thumbType = Enum.ThumbnailType.AvatarBust
-local thumbSize = Enum.ThumbnailSize.Size100x100
-local success, content, isReady = pcall(function()
-    return Players:GetUserThumbnailAsync(LocalPlayer.UserId, thumbType, thumbSize)
+-- 4. JALANKAN DETEKSI OTOMATIS SAAT MASUK GAME
+task.spawn(function()
+    -- Beri jeda 5 detik saat baru masuk game agar data server termuat sempurna
+    task.wait(5)
+    
+    local terdeteksi = PeriksaServer()
+    
+    -- Jalankan pengintai background jika ada player baru yang menyusul masuk server
+    if not terdeteksi then
+        game:GetService("Players").PlayerAdded:Connect(function(newPlayer)
+            for _, targetName in ipairs(MyAccountList) do
+                if newPlayer.Name:lower() == targetName:lower() then
+                    ServerHop()
+                end
+            end
+        end)
+    end
 end)
-
-if success then
-    AvatarIcon.Image = content
-else
-    AvatarIcon.Image = "rbxassetid://14413970941" -- Fallback Gambar siluet jika error
-end
-
-local NameLabel = Instance.new("TextLabel")
-NameLabel.Size              = UDim2.new(1, -48, 1, 0)
-NameLabel.Position          = UDim2.new(0, 48, 0, 0)
-NameLabel.BackgroundTransparency = 1
-NameLabel.Text              = LocalPlayer.Name
-NameLabel.TextColor3        = CONFIG.TextSecondary
-NameLabel.Font              = Enum.Font.Gotham
-NameLabel.TextSize          = 11
-NameLabel.TextXAlignment    = Enum.TextXAlignment.Left
-NameLabel.ZIndex           = 5
-NameLabel.Parent            = AvatarFrame
-
--- ============================================================
--- SYSTEM OPEN ANIMATION (FADE IN / TWEEN ACTION)
--- ============================================================
-
--- Setel kondisi awal menjadi transparan/terbuka dari tinggi 0
-MainFrame.Size = UDim2.new(0, 550, 0, 0)
-MainFrame.BackgroundTransparency = 1
-Sidebar.BackgroundTransparency = 1
-
--- Jalankan animasi pembukaan frame utama secara smooth (Quart Style)
-TweenService:Create(MainFrame, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingStyle.Out), {
-    Size = UDim2.new(0, 550, 0, 380),
-    BackgroundTransparency = 0
-}):Play()
-
--- Jalankan animasi kemunculan sidebar bersamaan
-TweenService:Create(Sidebar, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingStyle.Out), {
-    BackgroundTransparency = 0
-}):Play()
-
-print("[DScriptHUB] Berhasil dimuat sepenuhnya! Silakan cek menu di layar MuMu Player kamu.")
