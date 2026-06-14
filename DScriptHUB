@@ -1,5 +1,5 @@
 -- ============================================================
--- GROW A GARDEN 2: SNIPER + IOS SWITCH UI (TOTAL FIX V7)
+-- GROW A GARDEN 2: SNIPER + MULTI-FOLDER DETECTOR (V16 ENGINE)
 -- ============================================================
 
 local Players = game:GetService("Players")
@@ -55,7 +55,6 @@ MainFrame.BorderSizePixel = 0
 local Corner = Instance.new("UICorner", MainFrame)
 Corner.CornerRadius = UDim.new(0, 8)
 
--- Stroke Efek Tipis Glossy
 local UIStroke = Instance.new("UIStroke", MainFrame)
 UIStroke.Color = Color3.fromRGB(30, 30, 30)
 UIStroke.Thickness = 1
@@ -88,13 +87,9 @@ StatusLabel.Font = Enum.Font.GothamMedium
 StatusLabel.TextSize = 11
 StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
 
--- ------------------------------------------------------------
--- FUNGSI MODERATOR SWITCH OVAL (MENGAKOMODASI KLIK SAKLAR iOS)
--- ------------------------------------------------------------
 local function BuatSwitchOval(namaText, urutanY, configKey)
     local YPos = 58 + (urutanY * 34)
     
-    -- Label Nama Menu
     local Label = Instance.new("TextLabel", MainFrame)
     Label.Size = UDim2.new(0, 150, 0, 26)
     Label.Position = UDim2.new(0, 14, 0, YPos)
@@ -105,7 +100,6 @@ local function BuatSwitchOval(namaText, urutanY, configKey)
     Label.TextSize = 12
     Label.TextXAlignment = Enum.TextXAlignment.Left
     
-    -- Background Capsule Oval Slider
     local SwitchBg = Instance.new("TextButton", MainFrame)
     SwitchBg.Size = UDim2.new(0, 44, 0, 22)
     SwitchBg.Position = UDim2.new(0, 200, 0, YPos + 2)
@@ -114,7 +108,6 @@ local function BuatSwitchOval(namaText, urutanY, configKey)
     local RoundBg = Instance.new("UICorner", SwitchBg)
     RoundBg.CornerRadius = UDim.new(1, 0)
     
-    -- Tombol Bulat Putih di dalam Slider
     local Ball = Instance.new("Frame", SwitchBg)
     Ball.Size = UDim2.new(0, 16, 0, 16)
     Ball.Position = Config[configKey] and UDim2.new(0, 25, 0, 3) or UDim2.new(0, 3, 0, 3)
@@ -127,7 +120,6 @@ local function BuatSwitchOval(namaText, urutanY, configKey)
         local state = Config[configKey]
         SaveConfig()
         
-        -- Animasi Transisi Halus
         local targetColor = state and Color3.fromRGB(39, 174, 96) or Color3.fromRGB(40, 40, 40)
         local targetPos = state and UDim2.new(0, 25, 0, 3) or UDim2.new(0, 3, 0, 3)
         
@@ -142,7 +134,6 @@ end
 BuatSwitchOval("NORMAL SEED", 0, "AutoNormalSeed")
 BuatSwitchOval("SEED EVENT", 1, "AutoSeedEvent")
 
--- Label Timer Server Hop
 local TimerLabel = Instance.new("TextLabel", MainFrame)
 TimerLabel.Size = UDim2.new(1, -24, 0, 22)
 TimerLabel.Position = UDim2.new(0, 12, 0, 132)
@@ -188,7 +179,7 @@ task.spawn(function()
 end)
 
 -- ============================================================
--- [CORE LOGIC] TOTAL RE-FILTERING SYSTEM VIA MULTI-CHECK DETECTOR
+-- [CORE LOGIC] INSTANT FIRE PROXIMITY PROMPT
 -- ============================================================
 local function AmbilPromptInstan(itemObject)
     local prompt = itemObject:FindFirstChildWhichIsA("ProximityPrompt", true)
@@ -196,7 +187,7 @@ local function AmbilPromptInstan(itemObject)
         prompt.HoldDuration = 0
         task.spawn(function()
             prompt:InputHoldBegin()
-            task.wait(0.01)
+            task.wait(0.005) -- Micro-wait untuk stabilitas bypass executor
             prompt:InputHoldEnd()
             if fireproximityprompt then fireproximityprompt(prompt) end
         end)
@@ -204,26 +195,27 @@ local function AmbilPromptInstan(itemObject)
 end
 
 local function ProsesSikatItem(item)
-    local targetPart = item:IsA("BasePart") and item or item:FindFirstChildWhichIsA("BasePart") or item.PrimaryPart
+    if not item or not item.Parent then return end
+    
+    local targetPart = item:IsA("BasePart") and item or item:FindFirstChildWhichIsA("BasePart", true) or item.PrimaryPart
     if not targetPart then return end
     
-    -- AMBIL SELURUH INFORMASI STRING UNTUK MENGHINDARI BUG DETEKSI
     local namaKecil = item.Name:lower()
     local promptText = ""
     
     local prompt = item:FindFirstChildWhichIsA("ProximityPrompt", true)
     if prompt then
-        promptText = prompt.ObjectText:lower() -- Membaca teks "Gold Seed" atau "Rainbow Seed" dari interaksi UI game
+        promptText = prompt.ObjectText:lower()
     end
     
-    -- DETEKSI MUTLAK: Periksa nama objek DAN teks prompt interaksinya
+    -- DETEKSI: Cek nama objek atau teks interaksi UI game
     local IsEventSeed = false
     if string.find(namaKecil, "gold") or string.find(namaKecil, "rainbow") or 
        string.find(promptText, "gold") or string.find(promptText, "rainbow") or string.find(promptText, "claim") then
         IsEventSeed = true
     end
     
-    -- SAKLAR FILTER TOGGLE CONFIG
+    -- TOGGLE CONFIG FILTER
     if IsEventSeed and not Config.AutoSeedEvent then return end 
     if not IsEventSeed and not Config.AutoNormalSeed then return end 
     
@@ -234,11 +226,10 @@ local function ProsesSikatItem(item)
         StatusLabel.Text = IsEventSeed and "Status: SNIPING EVENT SEED! 🔥" or "Status: SNIPING NORMAL SEED"
         StatusLabel.TextColor3 = IsEventSeed and Color3.fromRGB(255, 140, 0) or Color3.fromRGB(241, 196, 15)
         
-        -- Eksekusi Teleportasi Tepat di Titik Koordinat Barang
-        root.CFrame = targetPart.CFrame * CFrame.new(0, 1, 0)
-        task.wait(IsEventSeed and 0.15 or 0.08)
+        -- Teleportasi langsung ke part target tanpa offset berlebih
+        root.CFrame = targetPart.CFrame
+        task.wait(0.02) -- Waktu tunggu super pendek agar posisi stabil di mata server
         
-        -- Eksekusi Bypass Ambil Prompt Instan
         AmbilPromptInstan(item)
         
         task.wait(0.05)
@@ -248,30 +239,24 @@ local function ProsesSikatItem(item)
 end
 
 -- ============================================================
--- [MONITORING MULTI-FOLDER JALUR LENGKAP]
+-- [MULTI-FOLDER MONITOR SYSTEM]
 -- ============================================================
 local DroppedItems = workspace:WaitForChild("DroppedItems")
 local MapFolder = workspace:WaitForChild("Map")
 local SeedPackClient = MapFolder:WaitForChild("SeedPackSpawnClient")
 local SeedPackServer = MapFolder:WaitForChild("SeedPackSpawnServerLocations")
 
--- 1. Monitor Folder DroppedItems
-for _, item in ipairs(DroppedItems:GetChildren()) do ProsesSikatItem(item) end
-DroppedItems.ChildAdded:Connect(function(newItem)
-    task.wait(0.03)
-    ProsesSikatItem(newItem)
-end)
+-- Jalankan fungsi pemantauan untuk semua folder target
+local function DaftarkanFolder(folder)
+    for _, item in ipairs(folder:GetChildren()) do 
+        task.spawn(ProsesSikatItem, item) 
+    end
+    folder.ChildAdded:Connect(function(newItem)
+        task.wait(0.01) -- Jeda mikro render object
+        task.spawn(ProsesSikatItem, newItem)
+    end)
+end
 
--- 2. Monitor Folder SeedPackSpawnClient
-for _, item in ipairs(SeedPackClient:GetChildren()) do ProsesSikatItem(item) end
-SeedPackClient.ChildAdded:Connect(function(newItem)
-    task.wait(0.03)
-    ProsesSikatItem(newItem)
-end)
-
--- 3. Monitor Folder SeedPackSpawnServerLocations
-for _, item in ipairs(SeedPackServer:GetChildren()) do ProsesSikatItem(item) end
-SeedPackServer.ChildAdded:Connect(function(newItem)
-    task.wait(0.03)
-    ProsesSikatItem(newItem)
-end)
+DaftarkanFolder(DroppedItems)
+DaftarkanFolder(SeedPackClient)
+DaftarkanFolder(SeedPackServer)
