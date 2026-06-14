@@ -1,5 +1,5 @@
 -- ============================================================
--- GROW A GARDEN 2: SNIPER + MULTI-FOLDER DETECTOR (V16 ENGINE)
+-- GROW A GARDEN 2: SNIPER V18 - SPEED CONTROL + DRAGGABLE UI
 -- ============================================================
 
 local Players = game:GetService("Players")
@@ -8,19 +8,40 @@ local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
 
 local ConfigFile = "GrowAGarden2_SniperConfig.json"
 local Config = {
     AutoNormalSeed = true,
-    AutoSeedEvent = true
+    AutoSeedEvent  = true,
+    SpeedMode      = 2   -- 1=Safe | 2=Fast | 3=Turbo | 4=Instant
 }
+
+-- ============================================================
+-- [SPEED PROFILES] Semua delay dikontrol dari sini
+-- ============================================================
+-- TeleportWait : jeda setelah teleport sebelum fire prompt
+-- PromptRetry  : jeda antara retry fire prompt
+-- ChildWait    : jeda saat ChildAdded sebelum proses
+-- PromptWait   : max tunggu prompt muncul (detik)
+local SpeedProfiles = {
+    [1] = { name = "SAFE",    color = Color3.fromRGB(52, 152, 219),  TeleportWait = 0.12, PromptRetry = 0.08, ChildWait = 0.05, PromptWait = 1.0  },
+    [2] = { name = "FAST",    color = Color3.fromRGB(46, 204, 113),  TeleportWait = 0.06, PromptRetry = 0.04, ChildWait = 0.02, PromptWait = 0.5  },
+    [3] = { name = "TURBO",   color = Color3.fromRGB(241, 196, 15),  TeleportWait = 0.02, PromptRetry = 0.01, ChildWait = 0.01, PromptWait = 0.3  },
+    [4] = { name = "INSTANT", color = Color3.fromRGB(231, 76, 60),   TeleportWait = 0,    PromptRetry = 0,    ChildWait = 0,    PromptWait = 0.1  },
+}
+
+local function GetSpeed()
+    return SpeedProfiles[Config.SpeedMode] or SpeedProfiles[2]
+end
 
 local function LoadConfig()
     if isfile and readfile and isfile(ConfigFile) then
-        local success, data = pcall(function() return HttpService:JSONDecode(readfile(ConfigFile)) end)
-        if success and type(data) == "table" then
+        local ok, data = pcall(function() return HttpService:JSONDecode(readfile(ConfigFile)) end)
+        if ok and type(data) == "table" then
             if data.AutoNormalSeed ~= nil then Config.AutoNormalSeed = data.AutoNormalSeed end
-            if data.AutoSeedEvent ~= nil then Config.AutoSeedEvent = data.AutoSeedEvent end
+            if data.AutoSeedEvent  ~= nil then Config.AutoSeedEvent  = data.AutoSeedEvent  end
+            if data.SpeedMode      ~= nil then Config.SpeedMode      = data.SpeedMode      end
         end
     end
 end
@@ -30,132 +51,248 @@ local function SaveConfig()
 end
 
 LoadConfig()
-local TimeLeft = 30 * 60 
+
+local TimeLeft = 30 * 60
 
 local TargetGuiParent = game:GetService("CoreGui")
-local successGui, _ = pcall(function() return game:GetService("CoreGui").Name end)
-if not successGui then TargetGuiParent = PlayerGui end
+local ok2, _ = pcall(function() return game:GetService("CoreGui").Name end)
+if not ok2 then TargetGuiParent = PlayerGui end
 
 if TargetGuiParent:FindFirstChild("KaitunMonitorGui") then
     TargetGuiParent:FindFirstChild("KaitunMonitorGui"):Destroy()
 end
 
 -- ============================================================
--- [UI] MODERN BLACK MONITORS + SLIDER SWITCH OVAL
+-- [UI] FRAME UTAMA  (tinggi 210 → ada row speed di bawah)
 -- ============================================================
 local ScreenGui = Instance.new("ScreenGui", TargetGuiParent)
-ScreenGui.Name = "KaitunMonitorGui"
+ScreenGui.Name        = "KaitunMonitorGui"
 ScreenGui.ResetOnSpawn = false
 
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, 260, 0, 165)
-MainFrame.Position = UDim2.new(0.05, 0, 0.15, 0)
+MainFrame.Size            = UDim2.new(0, 260, 0, 210)
+MainFrame.Position        = UDim2.new(0.05, 0, 0.15, 0)
 MainFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
-MainFrame.BorderSizePixel = 0
-local Corner = Instance.new("UICorner", MainFrame)
-Corner.CornerRadius = UDim.new(0, 8)
-
+MainFrame.BorderSizePixel  = 0
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 8)
 local UIStroke = Instance.new("UIStroke", MainFrame)
-UIStroke.Color = Color3.fromRGB(30, 30, 30)
-UIStroke.Thickness = 1
+UIStroke.Color = Color3.fromRGB(30, 30, 30); UIStroke.Thickness = 1
 
+-- ============================================================
+-- [DRAG SYSTEM]
+-- ============================================================
+local dragging, dragStart, startPos = false, nil, nil
+
+local DragHandle = Instance.new("Frame", MainFrame)
+DragHandle.Size               = UDim2.new(1, 0, 0, 55)
+DragHandle.Position           = UDim2.new(0, 0, 0, 0)
+DragHandle.BackgroundTransparency = 1
+DragHandle.ZIndex             = 10
+
+DragHandle.InputBegan:Connect(function(inp)
+    if inp.UserInputType == Enum.UserInputType.MouseButton1 or
+       inp.UserInputType == Enum.UserInputType.Touch then
+        dragging  = true
+        dragStart = inp.Position
+        startPos  = MainFrame.Position
+    end
+end)
+DragHandle.InputEnded:Connect(function(inp)
+    if inp.UserInputType == Enum.UserInputType.MouseButton1 or
+       inp.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+    end
+end)
+UserInputService.InputChanged:Connect(function(inp)
+    if dragging and (inp.UserInputType == Enum.UserInputType.MouseMovement or
+                     inp.UserInputType == Enum.UserInputType.Touch) then
+        local d = inp.Position - dragStart
+        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X,
+                                       startPos.Y.Scale, startPos.Y.Offset + d.Y)
+    end
+end)
+
+-- ============================================================
+-- [UI] PROFILE + STATUS
+-- ============================================================
 local ProfileImage = Instance.new("ImageLabel", MainFrame)
-ProfileImage.Size = UDim2.new(0, 45, 0, 45)
+ProfileImage.Size     = UDim2.new(0, 45, 0, 45)
 ProfileImage.Position = UDim2.new(0, 12, 0, 12)
 ProfileImage.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-ProfileImage.Image = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. LocalPlayer.UserId .. "&width=150&height=150&format=png"
-local CornerImg = Instance.new("UICorner", ProfileImage)
-CornerImg.CornerRadius = UDim.new(0, 6)
+ProfileImage.Image    = "https://www.roblox.com/headshot-thumbnail/image?userId="
+                        .. LocalPlayer.UserId .. "&width=150&height=150&format=png"
+ProfileImage.ZIndex   = 2
+Instance.new("UICorner", ProfileImage).CornerRadius = UDim.new(0, 6)
 
 local NameLabel = Instance.new("TextLabel", MainFrame)
-NameLabel.Size = UDim2.new(0, 180, 0, 20)
-NameLabel.Position = UDim2.new(0, 68, 0, 12)
+NameLabel.Size      = UDim2.new(0, 180, 0, 20)
+NameLabel.Position  = UDim2.new(0, 68, 0, 12)
 NameLabel.BackgroundTransparency = 1
-NameLabel.Text = "User: " .. LocalPlayer.Name
+NameLabel.Text      = "User: " .. LocalPlayer.Name
 NameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-NameLabel.Font = Enum.Font.GothamBold
-NameLabel.TextSize = 14
+NameLabel.Font      = Enum.Font.GothamBold
+NameLabel.TextSize  = 14
 NameLabel.TextXAlignment = Enum.TextXAlignment.Left
+NameLabel.ZIndex    = 2
 
 local StatusLabel = Instance.new("TextLabel", MainFrame)
-StatusLabel.Size = UDim2.new(0, 180, 0, 15)
-StatusLabel.Position = UDim2.new(0, 68, 0, 30)
+StatusLabel.Size      = UDim2.new(0, 180, 0, 15)
+StatusLabel.Position  = UDim2.new(0, 68, 0, 30)
 StatusLabel.BackgroundTransparency = 1
-StatusLabel.Text = "Status: SNIPING ACTIVE"
+StatusLabel.Text      = "Status: SNIPING ACTIVE"
 StatusLabel.TextColor3 = Color3.fromRGB(46, 204, 113)
-StatusLabel.Font = Enum.Font.GothamMedium
-StatusLabel.TextSize = 11
+StatusLabel.Font      = Enum.Font.GothamMedium
+StatusLabel.TextSize  = 11
 StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+StatusLabel.ZIndex    = 2
 
-local function BuatSwitchOval(namaText, urutanY, configKey)
+-- ============================================================
+-- [UI] SWITCH TOGGLE OVAL
+-- ============================================================
+local function BuatSwitch(namaText, urutanY, configKey)
     local YPos = 58 + (urutanY * 34)
-    
+
     local Label = Instance.new("TextLabel", MainFrame)
-    Label.Size = UDim2.new(0, 150, 0, 26)
-    Label.Position = UDim2.new(0, 14, 0, YPos)
+    Label.Size      = UDim2.new(0, 150, 0, 26)
+    Label.Position  = UDim2.new(0, 14, 0, YPos)
     Label.BackgroundTransparency = 1
-    Label.Text = namaText
-    Label.TextColor3 = Config[configKey] and Color3.fromRGB(46, 204, 113) or Color3.fromRGB(140, 140, 140)
-    Label.Font = Enum.Font.GothamBold
-    Label.TextSize = 12
+    Label.Text      = namaText
+    Label.TextColor3 = Config[configKey] and Color3.fromRGB(46,204,113) or Color3.fromRGB(140,140,140)
+    Label.Font      = Enum.Font.GothamBold
+    Label.TextSize  = 12
     Label.TextXAlignment = Enum.TextXAlignment.Left
-    
+    Label.ZIndex    = 2
+
     local SwitchBg = Instance.new("TextButton", MainFrame)
-    SwitchBg.Size = UDim2.new(0, 44, 0, 22)
+    SwitchBg.Size   = UDim2.new(0, 44, 0, 22)
     SwitchBg.Position = UDim2.new(0, 200, 0, YPos + 2)
-    SwitchBg.Text = ""
-    SwitchBg.BackgroundColor3 = Config[configKey] and Color3.fromRGB(39, 174, 96) or Color3.fromRGB(40, 40, 40)
-    local RoundBg = Instance.new("UICorner", SwitchBg)
-    RoundBg.CornerRadius = UDim.new(1, 0)
-    
+    SwitchBg.Text   = ""
+    SwitchBg.BackgroundColor3 = Config[configKey] and Color3.fromRGB(39,174,96) or Color3.fromRGB(40,40,40)
+    SwitchBg.ZIndex = 11
+    Instance.new("UICorner", SwitchBg).CornerRadius = UDim.new(1, 0)
+
     local Ball = Instance.new("Frame", SwitchBg)
-    Ball.Size = UDim2.new(0, 16, 0, 16)
-    Ball.Position = Config[configKey] and UDim2.new(0, 25, 0, 3) or UDim2.new(0, 3, 0, 3)
+    Ball.Size     = UDim2.new(0, 16, 0, 16)
+    Ball.Position = Config[configKey] and UDim2.new(0,25,0,3) or UDim2.new(0,3,0,3)
     Ball.BackgroundColor3 = Color3.fromRGB(240, 240, 240)
-    local RoundBall = Instance.new("UICorner", Ball)
-    RoundBall.CornerRadius = UDim.new(1, 0)
-    
+    Ball.ZIndex   = 12
+    Instance.new("UICorner", Ball).CornerRadius = UDim.new(1, 0)
+
     SwitchBg.MouseButton1Click:Connect(function()
         Config[configKey] = not Config[configKey]
-        local state = Config[configKey]
+        local s = Config[configKey]
         SaveConfig()
-        
-        local targetColor = state and Color3.fromRGB(39, 174, 96) or Color3.fromRGB(40, 40, 40)
-        local targetPos = state and UDim2.new(0, 25, 0, 3) or UDim2.new(0, 3, 0, 3)
-        
-        TweenService:Create(SwitchBg, TweenInfo.new(0.15), {BackgroundColor3 = targetColor}):Play()
-        TweenService:Create(Ball, TweenInfo.new(0.15), {Position = targetPos}):Play()
-        
-        Label.Text = namaText
-        Label.TextColor3 = state and Color3.fromRGB(46, 204, 113) or Color3.fromRGB(140, 140, 140)
+        TweenService:Create(SwitchBg, TweenInfo.new(0.15), {BackgroundColor3 = s and Color3.fromRGB(39,174,96) or Color3.fromRGB(40,40,40)}):Play()
+        TweenService:Create(Ball,     TweenInfo.new(0.15), {Position = s and UDim2.new(0,25,0,3) or UDim2.new(0,3,0,3)}):Play()
+        Label.TextColor3 = s and Color3.fromRGB(46,204,113) or Color3.fromRGB(140,140,140)
     end)
 end
 
-BuatSwitchOval("NORMAL SEED", 0, "AutoNormalSeed")
-BuatSwitchOval("SEED EVENT", 1, "AutoSeedEvent")
-
-local TimerLabel = Instance.new("TextLabel", MainFrame)
-TimerLabel.Size = UDim2.new(1, -24, 0, 22)
-TimerLabel.Position = UDim2.new(0, 12, 0, 132)
-TimerLabel.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
-TimerLabel.Text = "Server Hop In: 30m 00s"
-TimerLabel.TextColor3 = Color3.fromRGB(160, 160, 160)
-TimerLabel.Font = Enum.Font.GothamBold
-TimerLabel.TextSize = 11
-local CornerTimer = Instance.new("UICorner", TimerLabel)
-CornerTimer.CornerRadius = UDim.new(0, 4)
+BuatSwitch("NORMAL SEED", 0, "AutoNormalSeed")
+BuatSwitch("SEED EVENT",  1, "AutoSeedEvent")
 
 -- ============================================================
--- [LOGIK] SERVER HOPPERS
+-- [UI] SPEED SELECTOR — 4 tombol kecil berjajar
+-- ============================================================
+local SpeedRowY = 130
+
+local SpeedTitle = Instance.new("TextLabel", MainFrame)
+SpeedTitle.Size      = UDim2.new(0, 80, 0, 16)
+SpeedTitle.Position  = UDim2.new(0, 14, 0, SpeedRowY)
+SpeedTitle.BackgroundTransparency = 1
+SpeedTitle.Text      = "PICK SPEED:"
+SpeedTitle.TextColor3 = Color3.fromRGB(180, 180, 180)
+SpeedTitle.Font      = Enum.Font.GothamBold
+SpeedTitle.TextSize  = 10
+SpeedTitle.TextXAlignment = Enum.TextXAlignment.Left
+SpeedTitle.ZIndex    = 2
+
+local SpeedButtons = {}
+
+local function RefreshSpeedButtons()
+    for mode, btn in pairs(SpeedButtons) do
+        local sp = SpeedProfiles[mode]
+        if mode == Config.SpeedMode then
+            btn.BackgroundColor3 = sp.color
+            btn.TextColor3       = Color3.fromRGB(10, 10, 10)
+        else
+            btn.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+            btn.TextColor3       = Color3.fromRGB(120, 120, 120)
+        end
+    end
+end
+
+local btnW  = 54
+local btnGap = 4
+local startX = 14
+
+for mode = 1, 4 do
+    local sp  = SpeedProfiles[mode]
+    local xPos = startX + (mode - 1) * (btnW + btnGap)
+
+    local Btn = Instance.new("TextButton", MainFrame)
+    Btn.Size     = UDim2.new(0, btnW, 0, 24)
+    Btn.Position = UDim2.new(0, xPos, 0, SpeedRowY + 20)
+    Btn.Text     = sp.name
+    Btn.Font     = Enum.Font.GothamBold
+    Btn.TextSize = 9
+    Btn.BorderSizePixel = 0
+    Btn.ZIndex   = 11
+    Instance.new("UICorner", Btn).CornerRadius = UDim.new(0, 5)
+
+    SpeedButtons[mode] = Btn
+
+    Btn.MouseButton1Click:Connect(function()
+        Config.SpeedMode = mode
+        SaveConfig()
+        RefreshSpeedButtons()
+        -- Feedback: kedip sebentar
+        TweenService:Create(Btn, TweenInfo.new(0.05), {BackgroundColor3 = Color3.fromRGB(255,255,255)}):Play()
+        task.wait(0.07)
+        RefreshSpeedButtons()
+    end)
+end
+
+RefreshSpeedButtons()
+
+-- Keterangan speed aktif
+local SpeedHint = Instance.new("TextLabel", MainFrame)
+SpeedHint.Size      = UDim2.new(1, -24, 0, 12)
+SpeedHint.Position  = UDim2.new(0, 12, 0, SpeedRowY + 48)
+SpeedHint.BackgroundTransparency = 1
+SpeedHint.Text      = "SAFE=stabil | FAST=default | TURBO=agresif | INSTANT=max"
+SpeedHint.TextColor3 = Color3.fromRGB(70, 70, 70)
+SpeedHint.Font      = Enum.Font.Gotham
+SpeedHint.TextSize  = 8
+SpeedHint.TextXAlignment = Enum.TextXAlignment.Left
+SpeedHint.ZIndex    = 2
+
+-- ============================================================
+-- [UI] TIMER SERVER HOP
+-- ============================================================
+local TimerLabel = Instance.new("TextLabel", MainFrame)
+TimerLabel.Size     = UDim2.new(1, -24, 0, 22)
+TimerLabel.Position = UDim2.new(0, 12, 0, 178)
+TimerLabel.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+TimerLabel.Text     = "Server Hop In: 30m 00s"
+TimerLabel.TextColor3 = Color3.fromRGB(160, 160, 160)
+TimerLabel.Font     = Enum.Font.GothamBold
+TimerLabel.TextSize = 11
+TimerLabel.ZIndex   = 2
+Instance.new("UICorner", TimerLabel).CornerRadius = UDim.new(0, 4)
+
+-- ============================================================
+-- [LOGIK] SERVER HOP
 -- ============================================================
 local function ServerHop()
-    StatusLabel.Text = "Status: HOPPING SERVER..."
+    StatusLabel.Text      = "Status: HOPPING SERVER..."
     StatusLabel.TextColor3 = Color3.fromRGB(231, 76, 60)
-    local success, result = pcall(function()
-        local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
-        return HttpService:JSONDecode(game:HttpGet(url))
+    local ok, result = pcall(function()
+        return HttpService:JSONDecode(game:HttpGet(
+            "https://games.roblox.com/v1/games/" .. game.PlaceId ..
+            "/servers/Public?sortOrder=Asc&limit=100"))
     end)
-    if success and result and result.data then
+    if ok and result and result.data then
         for _, server in ipairs(result.data) do
             if server.id ~= game.JobId and server.playing < server.maxPlayers then
                 pcall(function() TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, LocalPlayer) end)
@@ -170,89 +307,143 @@ end
 task.spawn(function()
     while TimeLeft > 0 do
         task.wait(1)
-        TimeLeft = TimeLeft - 1
-        local minutes = math.floor(TimeLeft / 60)
-        local seconds = TimeLeft % 60
-        TimerLabel.Text = string.format("Server Hop In: %dm %02ds", minutes, seconds)
+        TimeLeft -= 1
+        TimerLabel.Text = string.format("Server Hop In: %dm %02ds",
+            math.floor(TimeLeft/60), TimeLeft % 60)
     end
     ServerHop()
 end)
 
 -- ============================================================
--- [CORE LOGIC] INSTANT FIRE PROXIMITY PROMPT
+-- [CORE] FIRE PROXIMITY PROMPT — SEMUA METHOD
 -- ============================================================
 local function AmbilPromptInstan(itemObject)
-    local prompt = itemObject:FindFirstChildWhichIsA("ProximityPrompt", true)
-    if prompt then
-        prompt.HoldDuration = 0
+    local prompts = {}
+    for _, v in ipairs(itemObject:GetDescendants()) do
+        if v:IsA("ProximityPrompt") then
+            table.insert(prompts, v)
+        end
+    end
+    if #prompts == 0 then return end
+
+    local sp = GetSpeed()
+
+    for _, prompt in ipairs(prompts) do
+        prompt.HoldDuration         = 0
+        prompt.MaxActivationDistance = 9999
+
         task.spawn(function()
-            prompt:InputHoldBegin()
-            task.wait(0.005) -- Micro-wait untuk stabilitas bypass executor
-            prompt:InputHoldEnd()
-            if fireproximityprompt then fireproximityprompt(prompt) end
+            -- Method 1: executor native (tercepat)
+            if fireproximityprompt then
+                pcall(fireproximityprompt, prompt)
+            end
+
+            -- Method 2: InputHold
+            pcall(function()
+                prompt:InputHoldBegin()
+                task.wait(0.005)
+                prompt:InputHoldEnd()
+            end)
+
+            -- Method 3: Retry setelah PromptRetry detik
+            task.wait(sp.PromptRetry)
+            if fireproximityprompt then
+                pcall(fireproximityprompt, prompt)
+            end
+
+            -- Method 4: Retry ketiga (hanya turbo/instant yang retry cepat)
+            task.wait(sp.PromptRetry)
+            if fireproximityprompt then
+                pcall(fireproximityprompt, prompt)
+            end
         end)
     end
 end
 
+-- ============================================================
+-- [CORE] PROSES ITEM — PAKAI SPEED PROFILE
+-- ============================================================
 local function ProsesSikatItem(item)
     if not item or not item.Parent then return end
-    
-    local targetPart = item:IsA("BasePart") and item or item:FindFirstChildWhichIsA("BasePart", true) or item.PrimaryPart
-    if not targetPart then return end
-    
+
+    local sp       = GetSpeed()
     local namaKecil = item.Name:lower()
     local promptText = ""
-    
+
+    -- Tunggu prompt muncul sesuai PromptWait dari speed profile
     local prompt = item:FindFirstChildWhichIsA("ProximityPrompt", true)
-    if prompt then
-        promptText = prompt.ObjectText:lower()
+    if not prompt then
+        local waited = 0
+        repeat
+            task.wait(0.03)
+            waited += 0.03
+            prompt = item:FindFirstChildWhichIsA("ProximityPrompt", true)
+        until prompt or waited >= sp.PromptWait
     end
-    
-    -- DETEKSI: Cek nama objek atau teks interaksi UI game
-    local IsEventSeed = false
-    if string.find(namaKecil, "gold") or string.find(namaKecil, "rainbow") or 
-       string.find(promptText, "gold") or string.find(promptText, "rainbow") or string.find(promptText, "claim") then
-        IsEventSeed = true
-    end
-    
-    -- TOGGLE CONFIG FILTER
-    if IsEventSeed and not Config.AutoSeedEvent then return end 
-    if not IsEventSeed and not Config.AutoNormalSeed then return end 
-    
+
+    if prompt then promptText = prompt.ObjectText:lower() end
+
+    -- Deteksi jenis seed
+    local IsEventSeed =
+        string.find(namaKecil,  "gold")    or string.find(namaKecil,  "rainbow") or
+        string.find(namaKecil,  "event")   or string.find(promptText,  "gold")   or
+        string.find(promptText, "rainbow") or string.find(promptText,  "claim")
+
+    if IsEventSeed and not Config.AutoSeedEvent  then return end
+    if not IsEventSeed and not Config.AutoNormalSeed then return end
+
     local character = LocalPlayer.Character
-    local root = character and character:FindFirstChild("HumanoidRootPart")
-    
-    if root then
-        StatusLabel.Text = IsEventSeed and "Status: SNIPING EVENT SEED! 🔥" or "Status: SNIPING NORMAL SEED"
-        StatusLabel.TextColor3 = IsEventSeed and Color3.fromRGB(255, 140, 0) or Color3.fromRGB(241, 196, 15)
-        
-        -- Teleportasi langsung ke part target tanpa offset berlebih
-        root.CFrame = targetPart.CFrame
-        task.wait(0.02) -- Waktu tunggu super pendek agar posisi stabil di mata server
-        
-        AmbilPromptInstan(item)
-        
-        task.wait(0.05)
-        StatusLabel.Text = "Status: SNIPING ACTIVE"
-        StatusLabel.TextColor3 = Color3.fromRGB(46, 204, 113)
+    local root      = character and character:FindFirstChild("HumanoidRootPart")
+    if not root then return end
+
+    local targetPart = (item:IsA("BasePart") and item)
+        or item:FindFirstChildWhichIsA("BasePart", true)
+        or item.PrimaryPart
+    if not targetPart then return end
+
+    -- Status UI
+    if IsEventSeed then
+        StatusLabel.Text       = "Status: SNIPING EVENT SEED! 🔥"
+        StatusLabel.TextColor3 = Color3.fromRGB(255, 140, 0)
+    else
+        StatusLabel.Text       = "Status: SNIPING NORMAL SEED"
+        StatusLabel.TextColor3 = Color3.fromRGB(241, 196, 15)
     end
+
+    -- Teleport ke atas target
+    root.CFrame = targetPart.CFrame * CFrame.new(0, 2, 0)
+
+    -- Tunggu server acknowledge posisi (dikontrol SpeedProfile)
+    if sp.TeleportWait > 0 then task.wait(sp.TeleportWait) end
+
+    if not item or not item.Parent then
+        StatusLabel.Text       = "Status: SNIPING ACTIVE"
+        StatusLabel.TextColor3 = Color3.fromRGB(46, 204, 113)
+        return
+    end
+
+    AmbilPromptInstan(item)
+
+    task.wait(0.1)
+    StatusLabel.Text       = "Status: SNIPING ACTIVE"
+    StatusLabel.TextColor3 = Color3.fromRGB(46, 204, 113)
 end
 
 -- ============================================================
--- [MULTI-FOLDER MONITOR SYSTEM]
+-- [MONITOR] MULTI-FOLDER WATCHER
 -- ============================================================
-local DroppedItems = workspace:WaitForChild("DroppedItems")
-local MapFolder = workspace:WaitForChild("Map")
+local DroppedItems  = workspace:WaitForChild("DroppedItems")
+local MapFolder     = workspace:WaitForChild("Map")
 local SeedPackClient = MapFolder:WaitForChild("SeedPackSpawnClient")
 local SeedPackServer = MapFolder:WaitForChild("SeedPackSpawnServerLocations")
 
--- Jalankan fungsi pemantauan untuk semua folder target
 local function DaftarkanFolder(folder)
-    for _, item in ipairs(folder:GetChildren()) do 
-        task.spawn(ProsesSikatItem, item) 
+    for _, item in ipairs(folder:GetChildren()) do
+        task.spawn(ProsesSikatItem, item)
     end
     folder.ChildAdded:Connect(function(newItem)
-        task.wait(0.01) -- Jeda mikro render object
+        local sp = GetSpeed()
+        if sp.ChildWait > 0 then task.wait(sp.ChildWait) end
         task.spawn(ProsesSikatItem, newItem)
     end)
 end
