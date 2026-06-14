@@ -14,6 +14,8 @@ local ConfigFile = "GrowAGarden2_SniperConfig.json"
 local Config = {
     AutoNormalSeed = true,
     AutoSeedEvent  = true,
+    AutoServerHop  = true,
+    AutoClickScreen = true,
     SpeedMode      = 2   -- 1=Safe | 2=Fast | 3=Turbo | 4=Instant
 }
 
@@ -41,6 +43,8 @@ local function LoadConfig()
         if ok and type(data) == "table" then
             if data.AutoNormalSeed ~= nil then Config.AutoNormalSeed = data.AutoNormalSeed end
             if data.AutoSeedEvent  ~= nil then Config.AutoSeedEvent  = data.AutoSeedEvent  end
+            if data.AutoServerHop  ~= nil then Config.AutoServerHop  = data.AutoServerHop  end
+            if data.AutoClickScreen ~= nil then Config.AutoClickScreen = data.AutoClickScreen end
             if data.SpeedMode      ~= nil then Config.SpeedMode      = data.SpeedMode      end
         end
     end
@@ -70,7 +74,7 @@ ScreenGui.Name        = "KaitunMonitorGui"
 ScreenGui.ResetOnSpawn = false
 
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size            = UDim2.new(0, 260, 0, 210)
+MainFrame.Size            = UDim2.new(0, 260, 0, 278)
 MainFrame.Position        = UDim2.new(0.05, 0, 0.15, 0)
 MainFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
 MainFrame.BorderSizePixel  = 0
@@ -190,11 +194,13 @@ end
 
 BuatSwitch("NORMAL SEED", 0, "AutoNormalSeed")
 BuatSwitch("SEED EVENT",  1, "AutoSeedEvent")
+BuatSwitch("SERVER HOP",  2, "AutoServerHop")
+BuatSwitch("AUTO CLICK",  3, "AutoClickScreen")
 
 -- ============================================================
 -- [UI] SPEED SELECTOR — 4 tombol kecil berjajar
 -- ============================================================
-local SpeedRowY = 130
+local SpeedRowY = 198
 
 local SpeedTitle = Instance.new("TextLabel", MainFrame)
 SpeedTitle.Size      = UDim2.new(0, 80, 0, 16)
@@ -272,7 +278,7 @@ SpeedHint.ZIndex    = 2
 -- ============================================================
 local TimerLabel = Instance.new("TextLabel", MainFrame)
 TimerLabel.Size     = UDim2.new(1, -24, 0, 22)
-TimerLabel.Position = UDim2.new(0, 12, 0, 178)
+TimerLabel.Position = UDim2.new(0, 12, 0, 246)
 TimerLabel.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
 TimerLabel.Text     = "Server Hop In: 30m 00s"
 TimerLabel.TextColor3 = Color3.fromRGB(160, 160, 160)
@@ -308,10 +314,19 @@ task.spawn(function()
     while TimeLeft > 0 do
         task.wait(1)
         TimeLeft -= 1
-        TimerLabel.Text = string.format("Server Hop In: %dm %02ds",
-            math.floor(TimeLeft/60), TimeLeft % 60)
+        if Config.AutoServerHop then
+            TimerLabel.Text = string.format("Server Hop In: %dm %02ds",
+                math.floor(TimeLeft/60), TimeLeft % 60)
+        else
+            TimerLabel.Text = "Server Hop: OFF"
+        end
     end
-    ServerHop()
+    if Config.AutoServerHop then
+        ServerHop()
+    else
+        -- Reset timer jika hop dimatikan saat countdown habis
+        TimeLeft = 30 * 60
+    end
 end)
 
 -- ============================================================
@@ -451,3 +466,114 @@ end
 DaftarkanFolder(DroppedItems)
 DaftarkanFolder(SeedPackClient)
 DaftarkanFolder(SeedPackServer)
+
+-- ============================================================
+-- [AUTO CLICK SCREEN] Deteksi loading selesai lalu auto klik
+-- ============================================================
+-- Cara kerja:
+-- 1. Tunggu sampai loading screen Roblox hilang (ReplicatedFirst)
+-- 2. Cek PlayerGui untuk TextLabel/ImageButton yang mengandung
+--    kata kunci "click", "tap", "anywhere", "touch", "continue"
+-- 3. Jika ketemu, simulasi klik di tengah layar
+-- 4. Jika tidak ketemu via GUI scan, fallback ke VirtualClick tengah layar
+
+local VirtualInputManager
+pcall(function()
+    VirtualInputManager = game:GetService("VirtualInputManager")
+end)
+
+local function KlikTengahLayar()
+    local vp = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize
+            or Vector2.new(1280, 720)
+    local cx = vp.X / 2
+    local cy = vp.Y / 2
+
+    -- Method 1: VirtualInputManager (didukung sebagian executor)
+    if VirtualInputManager then
+        pcall(function()
+            VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, true,  game, 0)
+            task.wait(0.05)
+            VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, false, game, 0)
+        end)
+    end
+
+    -- Method 2: mouse1click via executor global
+    if mouse1click then
+        pcall(mouse1click)
+    end
+
+    -- Method 3: Cari tombol di PlayerGui lalu :FireClickedEvent / Click()
+    for _, gui in ipairs(PlayerGui:GetChildren()) do
+        for _, obj in ipairs(gui:GetDescendants()) do
+            local namaObj = obj.Name:lower()
+            local teks    = ""
+            if obj:IsA("TextLabel") or obj:IsA("TextButton") then
+                teks = obj.Text:lower()
+            end
+            local adaKataKunci =
+                string.find(namaObj, "click")    or string.find(namaObj, "tap")   or
+                string.find(namaObj, "anywhere") or string.find(namaObj, "touch") or
+                string.find(namaObj, "continue") or string.find(namaObj, "start") or
+                string.find(teks,    "click")    or string.find(teks,    "tap")   or
+                string.find(teks,    "anywhere") or string.find(teks,    "touch") or
+                string.find(teks,    "continue") or string.find(teks,    "start") or
+                string.find(teks,    "sentuh")   or string.find(teks,    "mulai")
+
+            if adaKataKunci and obj.Visible then
+                if obj:IsA("TextButton") or obj:IsA("ImageButton") then
+                    pcall(function() obj:FireClickedEvent() end) -- executor method
+                    pcall(function() obj.MouseButton1Click:Fire() end)
+                end
+                return true -- ketemu, stop scan
+            end
+        end
+    end
+    return false
+end
+
+task.spawn(function()
+    -- Tunggu game benar-benar loaded dulu
+    if not game:IsLoaded() then
+        game.Loaded:Wait()
+    end
+    task.wait(1) -- Jeda 1 detik setelah loaded agar GUI render
+
+    -- Loop deteksi: cek setiap 0.5 detik maksimal 30 detik
+    -- (loading screen bisa lambat tergantung koneksi)
+    local maxWait  = 30
+    local elapsed  = 0
+    local berhasil = false
+
+    while elapsed < maxWait do
+        if not Config.AutoClickScreen then
+            -- Toggle dimatikan, diam saja
+            task.wait(0.5)
+            elapsed += 0.5
+        else
+            StatusLabel.Text       = string.format("Status: WAITING LOAD... (%ds)", maxWait - math.floor(elapsed))
+            StatusLabel.TextColor3 = Color3.fromRGB(52, 152, 219)
+
+            -- Coba klik
+            local ketemu = KlikTengahLayar()
+            if ketemu then
+                berhasil = true
+                StatusLabel.Text       = "Status: AUTO CLICK OK ✓"
+                StatusLabel.TextColor3 = Color3.fromRGB(46, 204, 113)
+                task.wait(1)
+                break
+            end
+
+            task.wait(0.5)
+            elapsed += 0.5
+        end
+    end
+
+    -- Jika setelah 30 detik tidak ketemu GUI tapi toggle ON,
+    -- tetap coba VirtualClick sebagai last resort
+    if not berhasil and Config.AutoClickScreen then
+        KlikTengahLayar()
+    end
+
+    StatusLabel.Text       = "Status: SNIPING ACTIVE"
+    StatusLabel.TextColor3 = Color3.fromRGB(46, 204, 113)
+end)
