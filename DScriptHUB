@@ -1,29 +1,22 @@
 -- ============================================================
--- MULTI-ACCOUNT DETECTOR & SERVER HOPPER (AUTO-EXECUTE)
+-- GROW A GARDEN 2: DROPPED SEEDS SNIPER (CUSTOM UI BYPASS)
 -- ============================================================
 
--- 1. DAFTAR NAMA AKUN KAMU (Sesuaikan dengan nama akun di RAM)
--- Tulis persis sesuai Username Roblox (bukan Display Name)
 local MyAccountList = {
-    "Kryton8301",
-    "Makzo154",
-    "Zildjan792",
-    "Vandame582",
-    "Xavier395",
-    "Braxton6103",
-    "Kenzho9278",
-    "Dextro5384",
-    "dimas123" -- Tambahkan nama akun lainnya di sini
+    "Kryton8301", "Makzo154", "Zildjan792", "Vandame582", "Xavier395",
+    "Braxton6103", "Kenzho9278", "Dextro5384", "Jovanka4176", "Rexford6209", "dimas123"
 }
 
--- 2. FUNGSI UNTUK MELAKUKAN SERVER HOPPING AMAN
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+-- ============================================================
+-- FITUR 1: LOGIKA SERVER HOPPER INSTAN (ANTI-SNIPE)
+-- ============================================================
 local function ServerHop()
-    print("[Hopper] Mendeteksi akun tim! Mencari server baru...")
-    local HttpService = game:GetService("HttpService")
-    local TeleportService = game:GetService("TeleportService")
-    local LocalPlayer = game:GetService("Players").LocalPlayer
-    
-    -- Mengambil daftar server publik acak dari API Roblox
     local success, result = pcall(function()
         local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
         return HttpService:JSONDecode(game:HttpGet(url))
@@ -31,62 +24,82 @@ local function ServerHop()
     
     if success and result and result.data then
         for _, server in ipairs(result.data) do
-            -- Cari server yang masih muat dan bukan server saat ini
             if server.id ~= game.JobId and server.playing < server.maxPlayers then
-                pcall(function()
-                    TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, LocalPlayer)
-                end)
-                task.wait(2) -- Jeda penahan agar tidak spamming jika proses teleport delay
+                pcall(function() TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, LocalPlayer) end)
+                task.wait(0.5)
             end
         end
     else
-        -- Cadangan jika API Roblox sedang lag, gunakan sistem Hop standar
-        pcall(function()
-            TeleportService:Teleport(game.PlaceId, LocalPlayer)
-        end)
+        pcall(function() TeleportService:Teleport(game.PlaceId, LocalPlayer) end)
     end
 end
 
--- 3. LOGIKA DETEKSI AKUN DI DALAM SERVER
-local function PeriksaServer()
-    local Players = game:GetService("Players")
-    local LocalPlayer = Players.LocalPlayer
-    
-    -- Menunggu sampai semua player selesai loading data dasarnya
-    task.wait(3) 
-    
-    for _, player in ipairs(Players:GetPlayers()) do
-        -- Pastikan script TIDAK mendeteksi dirinya sendiri
-        if player ~= LocalPlayer then
-            -- Mencocokkan nama player di server dengan daftar list kita
-            for _, targetName in ipairs(MyAccountList) do
-                if player.Name:lower() == targetName:lower() then
-                    print("[Hopper] AWAS! Akun " .. player.Name .. " ditemukan di server ini.")
-                    ServerHop()
-                    return true -- Menghentikan pengecekan karena sudah pasti Hop
+local function PeriksaNama(player)
+    if player == LocalPlayer then return end
+    for _, targetName in ipairs(MyAccountList) do
+        if player.Name:lower() == targetName:lower() then ServerHop() break end
+    end
+end
+for _, p in ipairs(Players:GetPlayers()) do PeriksaNama(p) end
+Players.PlayerAdded:Connect(PeriksaNama)
+
+-- ============================================================
+-- FITUR 2: ULTRA FAST CUSTOM UI CLICKER (BYPASS LOADING HOLD)
+-- ============================================================
+-- Fungsi pembantu untuk mendeteksi dan memicu klik instan pada UI ambil barang
+local function AutoClickCollectUI()
+    pcall(function()
+        -- Mencari keseleruhan UI di layar player yang punya fungsi interaksi / pick up
+        -- Biasanya tombol ini muncul di dalam BillboardGui di atas item atau di ScreenGui utama
+        for _, gui in ipairs(PlayerGui:GetDescendants()) do
+            if gui:IsA("GuiButton") and gui.Visible and (gui.Name:lower():find("pick") or gui.Name:lower():find("collect") or gui.Name:lower():find("take")) then
+                
+                -- METODE BYPASS 1: Meniru penekanan tombol instan (Mouse Down & Mouse Up) tanpa jeda loading
+                if getconnections then
+                    for _, connection in pairs(getconnections(gui.MouseButton1Down)) do connection:Fire() end
+                    task.wait(0.05) -- Jeda mikro tiruan hold
+                    for _, connection in pairs(getconnections(gui.MouseButton1Up)) do connection:Fire() end
+                    for _, connection in pairs(getconnections(gui.MouseButton1Click)) do connection:Fire() end
                 end
             end
         end
-    end
-    print("[Hopper] Server Aman! Tidak ada akun tim lain di sini. Melanjutkan farm...")
-    return false
+    end)
 end
 
--- 4. JALANKAN DETEKSI OTOMATIS SAAT MASUK GAME
-task.spawn(function()
-    -- Beri jeda 5 detik saat baru masuk game agar data server termuat sempurna
-    task.wait(5)
+-- ============================================================
+-- FITUR 3: INSTANT TELEPORT SNIPER (FOLDER DROPPEDITEMS)
+-- ============================================================
+local DroppedItems = workspace:WaitForChild("DroppedItems")
+
+local function SikatItem(item)
+    local targetPart = item:IsA("BasePart") and item or item:FindFirstChildWhichIsA("BasePart") or item.PrimaryPart
     
-    local terdeteksi = PeriksaServer()
-    
-    -- Jalankan pengintai background jika ada player baru yang menyusul masuk server
-    if not terdeteksi then
-        game:GetService("Players").PlayerAdded:Connect(function(newPlayer)
-            for _, targetName in ipairs(MyAccountList) do
-                if newPlayer.Name:lower() == targetName:lower() then
-                    ServerHop()
-                end
-            end
-        end)
+    if targetPart then
+        local character = LocalPlayer.Character
+        local root = character and character:FindFirstChild("HumanoidRootPart")
+        
+        if root then
+            -- 1. Teleport ke item
+            root.CFrame = targetPart.CFrame * CFrame.new(0, 1, 0)
+            
+            -- 2. Langsung paksa klik UI tombol ambil yang muncul di layar saat itu juga!
+            task.wait(0.1) -- Jeda sangat pendek agar UI-nya sempat muncul di layar client
+            AutoClickCollectUI()
+        end
     end
+end
+
+-- Scan item yang sudah ada atau baru jatuh
+for _, item in ipairs(DroppedItems:GetChildren()) do SikatItem(item) end
+DroppedItems.ChildAdded:Connect(function(newItem)
+    task.wait(0.01)
+    SikatItem(newItem)
+end)
+
+-- ============================================================
+-- FITUR 4: TIMEOUT SERVER HOPPER (30 MENIT)
+-- ============================================================
+task.spawn(function()
+    task.wait(30 * 60)
+    ServerHop()
 end)
