@@ -1,5 +1,5 @@
 -- ============================================================
--- GROW A GARDEN 2: ULTRA SNIPER GOD-SPEED (TOTAL AREA WATCH V9)
+-- GROW A GARDEN 2: FOLDER-BASED PURE SNIPER (FINAL REWRITE)
 -- ============================================================
 
 local Players = game:GetService("Players")
@@ -9,18 +9,18 @@ local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 local TweenService = game:GetService("TweenService")
 
-local ConfigFile = "GrowAGarden2_SniperConfig.json"
+local ConfigFile = "GrowAGarden2_FolderSniper.json"
 local Config = {
-    AutoNormalSeed = true,
-    AutoSeedEvent = true
+    AutoDroppedItems = true,
+    AutoSeedPackServer = true
 }
 
 local function LoadConfig()
     if isfile and readfile and isfile(ConfigFile) then
         local success, data = pcall(function() return HttpService:JSONDecode(readfile(ConfigFile)) end)
         if success and type(data) == "table" then
-            if data.AutoNormalSeed ~= nil then Config.AutoNormalSeed = data.AutoNormalSeed end
-            if data.AutoSeedEvent ~= nil then Config.AutoSeedEvent = data.AutoSeedEvent end
+            if data.AutoDroppedItems ~= nil then Config.AutoDroppedItems = data.AutoDroppedItems end
+            if data.AutoSeedPackServer ~= nil then Config.AutoSeedPackServer = data.AutoSeedPackServer end
         end
     end
 end
@@ -41,14 +41,14 @@ if TargetGuiParent:FindFirstChild("KaitunMonitorGui") then
 end
 
 -- ============================================================
--- [UI SYSTEM] MODERN IOS SLIDER PANEL
+-- [UI SYSTEM] MODERN BLACK MONITOR PANEL
 -- ============================================================
 local ScreenGui = Instance.new("ScreenGui", TargetGuiParent)
 ScreenGui.Name = "KaitunMonitorGui"
 ScreenGui.ResetOnSpawn = false
 
 local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, 260, 0, 165)
+MainFrame.Size = UDim2.new(0, 270, 0, 165)
 MainFrame.Position = UDim2.new(0.05, 0, 0.15, 0)
 MainFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
 MainFrame.BorderSizePixel = 0
@@ -74,14 +74,14 @@ NameLabel.BackgroundTransparency = 1
 NameLabel.Text = "User: " .. LocalPlayer.Name
 NameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 NameLabel.Font = Enum.Font.GothamBold
-NameLabel.TextSize = 14
+NameLabel.TextSize = 13
 NameLabel.TextXAlignment = Enum.TextXAlignment.Left
 
 local StatusLabel = Instance.new("TextLabel", MainFrame)
 StatusLabel.Size = UDim2.new(0, 180, 0, 15)
 StatusLabel.Position = UDim2.new(0, 68, 0, 30)
 StatusLabel.BackgroundTransparency = 1
-StatusLabel.Text = "Status: SNIPING ACTIVE"
+StatusLabel.Text = "Status: RADAR ACTIVE"
 StatusLabel.TextColor3 = Color3.fromRGB(46, 204, 113)
 StatusLabel.Font = Enum.Font.GothamMedium
 StatusLabel.TextSize = 11
@@ -91,18 +91,18 @@ local function BuatSwitchOval(namaText, urutanY, configKey)
     local YPos = 58 + (urutanY * 34)
     
     local Label = Instance.new("TextLabel", MainFrame)
-    Label.Size = UDim2.new(0, 150, 0, 26)
+    Label.Size = UDim2.new(0, 160, 0, 26)
     Label.Position = UDim2.new(0, 14, 0, YPos)
     Label.BackgroundTransparency = 1
     Label.Text = namaText
     Label.TextColor3 = Config[configKey] and Color3.fromRGB(46, 204, 113) or Color3.fromRGB(140, 140, 140)
     Label.Font = Enum.Font.GothamBold
-    Label.TextSize = 12
+    Label.TextSize = 11
     Label.TextXAlignment = Enum.TextXAlignment.Left
     
     local SwitchBg = Instance.new("TextButton", MainFrame)
     SwitchBg.Size = UDim2.new(0, 44, 0, 22)
-    SwitchBg.Position = UDim2.new(0, 200, 0, YPos + 2)
+    SwitchBg.Position = UDim2.new(0, 210, 0, YPos + 2)
     SwitchBg.Text = ""
     SwitchBg.BackgroundColor3 = Config[configKey] and Color3.fromRGB(39, 174, 96) or Color3.fromRGB(40, 40, 40)
     local RoundBg = Instance.new("UICorner", SwitchBg)
@@ -130,8 +130,8 @@ local function BuatSwitchOval(namaText, urutanY, configKey)
     end)
 end
 
-BuatSwitchOval("NORMAL SEED", 0, "AutoNormalSeed")
-BuatSwitchOval("SEED EVENT", 1, "AutoSeedEvent")
+BuatSwitchOval("NORMAL (DroppedItems)", 0, "AutoDroppedItems")
+BuatSwitchOval("EVENT (SeedPackServer)", 1, "AutoSeedPackServer")
 
 local TimerLabel = Instance.new("TextLabel", MainFrame)
 TimerLabel.Size = UDim2.new(1, -24, 0, 22)
@@ -145,7 +145,7 @@ local CornerTimer = Instance.new("UICorner", TimerLabel)
 CornerTimer.CornerRadius = UDim.new(0, 4)
 
 -- ============================================================
--- [SERVER HOP LOGIC]
+-- [LOGIK] SERVER HOPPERS
 -- ============================================================
 local function ServerHop()
     StatusLabel.Text = "Status: HOPPING SERVER..."
@@ -178,79 +178,64 @@ task.spawn(function()
 end)
 
 -- ============================================================
--- [CORE ENGINE] 0-DELAY INSTANT TELEPORT + INTERACT
+-- [CORE ENGINE] ENGINE ULTRA SNIPER MURNI FOLDER
 -- ============================================================
-local function AmbilPromptKilat(prompt)
-    prompt.HoldDuration = 0
-    task.spawn(prompt.InputHoldBegin, prompt)
-    if fireproximityprompt then 
-        task.spawn(fireproximityprompt, prompt) 
+local function AmbilPromptInstan(itemObject)
+    local prompt = itemObject:FindFirstChildWhichIsA("ProximityPrompt", true)
+    if prompt then
+        prompt.HoldDuration = 0
+        task.spawn(function()
+            prompt:InputHoldBegin()
+            task.wait(0.005)
+            prompt:InputHoldEnd()
+            if fireproximityprompt then fireproximityprompt(prompt) end
+        end)
     end
-    task.spawn(prompt.InputHoldEnd, prompt)
 end
 
-local function ProsesSikatItem(item)
+local function EksekusiSikat(item)
+    if not item or not item.Parent then return end
+
     -- Amankan part koordinat target secepat mungkin
-    local targetPart = item:IsA("BasePart") and item or item:FindFirstChildWhichIsA("BasePart") or item.PrimaryPart
+    local targetPart = item:IsA("BasePart") and item or item:FindFirstChildWhichIsA("BasePart", true) or item.PrimaryPart
     if not targetPart then return end
-    
-    local namaKecil = item.Name:lower()
-    
-    -- Ambil ProximityPrompt secara instan tanpa antrean thread
-    local prompt = item:FindFirstChildWhichIsA("ProximityPrompt", true)
-    local promptText = prompt and prompt.ObjectText:lower() or ""
-    
-    -- SISTEM DETEKSI KASTA BENIH GLOBAL (Membaca Nama Model & Teks Proximity UI)
-    local IsEventSeed = false
-    if string.find(namaKecil, "gold") or string.find(namaKecil, "rainbow") or 
-       string.find(promptText, "gold") or string.find(promptText, "rainbow") or string.find(promptText, "claim") then
-        IsEventSeed = true
-    end
-    
-    -- Saklar Validasi Berdasarkan Menu GUI Executor
-    if IsEventSeed and not Config.AutoSeedEvent then return end 
-    if not IsEventSeed and not Config.AutoNormalSeed then return end 
-    
+
     local character = LocalPlayer.Character
     local root = character and character:FindFirstChild("HumanoidRootPart")
     
     if root then
-        -- EXECUTION: Pindahkan CFrame Karakter Menabrak Objek Langsung
+        -- Pindah nempel ke objek murni tanpa jeda string check
         root.CFrame = targetPart.CFrame
-        
-        -- INJECTION: Eksekusi bypass fungsi ambil di milidetik yang sama
-        if prompt then
-            AmbilPromptKilat(prompt)
-        end
+        task.wait(0.02)
+        AmbilPromptInstan(item)
     end
 end
 
 -- ============================================================
--- [DETEKTOR PARALEL MULTI-FOLDER AREA]
+-- [PEMANTAU FOLDER AREA MANDIRI]
 -- ============================================================
-
--- Jalur Folder Utama 1: DroppedItems
 local DroppedItems = workspace:WaitForChild("DroppedItems")
-
--- Jalur Folder Baru 2 & 3: Map Spawn Locations (Sesuai Permintaan)
 local MapFolder = workspace:WaitForChild("Map")
-local SeedPackClient = MapFolder:WaitForChild("SeedPackSpawnClient")
 local SeedPackServer = MapFolder:WaitForChild("SeedPackSpawnServerLocations")
 
--- Fungsi untuk mendaftarkan tracker pemantauan instan pada suatu folder
-local function DaftarkanPemantauFolder(folderObj)
-    -- Ambil item yang sudah stand-by duluan di dalam folder saat script di-execute
-    for _, item in ipairs(folderObj:GetChildren()) do 
-        task.spawn(ProsesSikatItem, item) 
-    end
-    
-    -- Pantau kedatangan item baru secara realtime (0 DELAY MURNI)
-    folderObj.ChildAdded:Connect(function(newItem)
-        task.spawn(ProsesSikatItem, newItem)
-    end)
+-- 1. TRACKER JALUR JATUH MANUAL (NORMAL SEED / DROP)
+for _, item in ipairs(DroppedItems:GetChildren()) do
+    if Config.AutoDroppedItems then task.spawn(EksekusiSikat, item) end
 end
+DroppedItems.ChildAdded:Connect(function(newItem)
+    if Config.AutoDroppedItems then
+        task.wait(0.01) -- Jeda mikro render
+        task.spawn(EksekusiSikat, newItem)
+    end
+end)
 
--- Nyalakan radar pelacak di ketiga lokasi krusial secara bersamaan
-DaftarkanPemantauFolder(DroppedItems)
-DaftarkanPemantauFolder(SeedPackClient)
-DaftarkanPemantauFolder(SeedPackServer)
+-- 2. TRACKER JALUR SPAWN SERVER (EVENT / SPAWN ALAMI MAP)
+for _, item in ipairs(SeedPackServer:GetChildren()) do
+    if Config.AutoSeedPackServer then task.spawn(EksekusiSikat, item) end
+end
+SeedPackServer.ChildAdded:Connect(function(newItem)
+    if Config.AutoSeedPackServer then
+        task.wait(0.01) -- Jeda mikro render
+        task.spawn(EksekusiSikat, newItem)
+    end
+end)
