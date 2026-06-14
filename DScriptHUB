@@ -1,5 +1,5 @@
 -- ============================================================
--- GROW A GARDEN 2: SNIPER + TOGGLE MULTI-SEED WITH CONFIG
+-- GROW A GARDEN 2: SNIPER + TOGGLE MULTI-SEED (FIXED FILTER V5)
 -- ============================================================
 
 local Players = game:GetService("Players")
@@ -8,7 +8,7 @@ local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
--- Nama file konfigurasi yang akan disimpan di folder workspace executor
+-- Nama file konfigurasi yang disimpan di workspace executor
 local ConfigFile = "GrowAGarden2_SniperConfig.json"
 
 -- Data settingan default awal
@@ -26,7 +26,6 @@ local function LoadConfig()
             return HttpService:JSONDecode(readfile(ConfigFile))
         end)
         if success and type(data) == "table" then
-            -- Ambil data dari file jika berhasil dibaca
             if data.AutoNormalSeed ~= nil then Config.AutoNormalSeed = data.AutoNormalSeed end
             if data.AutoSeedEvent ~= nil then Config.AutoSeedEvent = data.AutoSeedEvent end
         end
@@ -41,7 +40,7 @@ local function SaveConfig()
     end
 end
 
--- Jalankan pembacaan config di awal script sebelum UI dibuat
+-- Load data config di awal
 LoadConfig()
 
 -- Waktu Tunggu Server Hop (30 Menit)
@@ -57,7 +56,7 @@ if TargetGuiParent:FindFirstChild("KaitunMonitorGui") then
 end
 
 -- ============================================================
--- [UI] MONITOR BLACK + TOGGLE SYSTEM WITH CONFIG
+-- [UI] MONITOR BLACK + TOGGLE SYSTEM
 -- ============================================================
 local ScreenGui = Instance.new("ScreenGui", TargetGuiParent)
 ScreenGui.Name = "KaitunMonitorGui"
@@ -100,10 +99,8 @@ StatusLabel.Font = Enum.Font.GothamMedium
 StatusLabel.TextSize = 11
 StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
 
--- ------------------------------------------------------------
--- KOMPONEN TOGGLE (MELOAD DATA DARI CONFIG)
--- ------------------------------------------------------------
-local function BuatToggle(nama, urutanY, configKey, fungsiKlik)
+-- Pembuat Komponen Toggle
+local function BuatToggle(nama, urutanY, configKey)
     local defaultOn = Config[configKey]
     local CheckBtn = Instance.new("TextButton", MainFrame)
     CheckBtn.Size = UDim2.new(0, 105, 0, 22)
@@ -123,17 +120,12 @@ local function BuatToggle(nama, urutanY, configKey, fungsiKlik)
         CheckBtn.BackgroundColor3 = currentStatus and Color3.fromRGB(35, 155, 86) or Color3.fromRGB(45, 45, 45)
         CheckBtn.Text = nama .. (currentStatus and ": ON" or ": OFF")
         
-        -- Langsung simpan perubahan saat tombol di-klik
         SaveConfig()
-        fungsiKlik(currentStatus)
     end)
 end
 
--- Pasang Toggle Normal Seed (Status otomatis mematuhi Config)
-BuatToggle("Normal Seed", 1, "AutoNormalSeed", function(state) end)
-
--- Pasang Toggle Seed Event (Status otomatis mematuhi Config)
-BuatToggle("Seed Event", 2, "AutoSeedEvent", function(state) end)
+BuatToggle("Normal Seed", 1, "AutoNormalSeed")
+BuatToggle("Seed Event", 2, "AutoSeedEvent")
 
 -- Label Timer Server Hop
 local TimerLabel = Instance.new("TextLabel", MainFrame)
@@ -206,10 +198,13 @@ local function ProsesSikatItem(item)
     local targetPart = item:IsA("BasePart") and item or item:FindFirstChildWhichIsA("BasePart") or item.PrimaryPart
     if not targetPart then return end
     
-    local namaKecil = item.Name:lower()
-    local IsEventSeed = namaKecil:find("rainbow") or namaKecil:find("gold") or namaKecil:find("event")
+    -- VALIDASI TOTAL BERDASARKAN GAMBAR WORKSPACE (image_3a7d1d.png)
+    local namaAsli = item.Name
     
-    -- Filter validasi membaca tabel Config terbaru
+    -- Filter Kasta Event: Jika nama foldernya murni tepat "Gold" atau "Rainbow"
+    local IsEventSeed = (namaAsli == "Gold") or (namaAsli == "Rainbow")
+    
+    -- Eksekusi penyaringan saklar toggle config
     if IsEventSeed and not Config.AutoSeedEvent then return end 
     if not IsEventSeed and not Config.AutoNormalSeed then return end 
     
@@ -220,9 +215,13 @@ local function ProsesSikatItem(item)
         StatusLabel.Text = IsEventSeed and "Status: SNIPING EVENT SEED! 🔥" or "Status: SNIPING NORMAL SEED"
         StatusLabel.TextColor3 = IsEventSeed and Color3.fromRGB(255, 140, 0) or Color3.fromRGB(241, 196, 15)
         
+        -- Eksekusi Teleportasi
         root.CFrame = targetPart.CFrame * CFrame.new(0, 1, 0)
-        task.wait(IsEventSeed and 0.12 or 0.08)
         
+        -- Jeda aman penyesuaian kordinat
+        task.wait(IsEventSeed and 0.15 or 0.08)
+        
+        -- Ambil item
         AmbilPromptInstan(item)
         
         task.wait(0.05)
@@ -231,8 +230,10 @@ local function ProsesSikatItem(item)
     end
 end
 
+-- Scan item awal server
 for _, item in ipairs(DroppedItems:GetChildren()) do ProsesSikatItem(item) end
 
+-- Pengintai Real-time
 DroppedItems.ChildAdded:Connect(function(newItem)
     task.wait(0.02)
     ProsesSikatItem(newItem)
