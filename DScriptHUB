@@ -1,11 +1,6 @@
 -- ============================================================
--- GROW A GARDEN 2: DROPPED SEEDS SNIPER (CUSTOM UI BYPASS)
+-- GROW A GARDEN 2: SNIPER + TOGGLE MULTI-SEED WITH CONFIG
 -- ============================================================
-
-local MyAccountList = {
-    "Kryton8301", "Makzo154", "Zildjan792", "Vandame582", "Xavier395",
-    "Braxton6103", "Kenzho9278", "Dextro5384", "Jovanka4176", "Rexford6209", "dimas123"
-}
 
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
@@ -13,10 +8,152 @@ local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
+-- Nama file konfigurasi yang akan disimpan di folder workspace executor
+local ConfigFile = "GrowAGarden2_SniperConfig.json"
+
+-- Data settingan default awal
+local Config = {
+    AutoNormalSeed = true,
+    AutoSeedEvent = true
+}
+
 -- ============================================================
--- FITUR 1: LOGIKA SERVER HOPPER INSTAN (ANTI-SNIPE)
+-- [FUNGSI CONFIG] SAVE & LOAD SYSTEM
+-- ============================================================
+local function LoadConfig()
+    if isfile and readfile and isfile(ConfigFile) then
+        local success, data = pcall(function()
+            return HttpService:JSONDecode(readfile(ConfigFile))
+        end)
+        if success and type(data) == "table" then
+            -- Ambil data dari file jika berhasil dibaca
+            if data.AutoNormalSeed ~= nil then Config.AutoNormalSeed = data.AutoNormalSeed end
+            if data.AutoSeedEvent ~= nil then Config.AutoSeedEvent = data.AutoSeedEvent end
+        end
+    end
+end
+
+local function SaveConfig()
+    if writefile then
+        pcall(function()
+            writefile(ConfigFile, HttpService:JSONEncode(Config))
+        end)
+    end
+end
+
+-- Jalankan pembacaan config di awal script sebelum UI dibuat
+LoadConfig()
+
+-- Waktu Tunggu Server Hop (30 Menit)
+local TimeLeft = 30 * 60 
+
+-- Amankan Parent UI
+local TargetGuiParent = game:GetService("CoreGui")
+local successGui, _ = pcall(function() return game:GetService("CoreGui").Name end)
+if not successGui then TargetGuiParent = PlayerGui end
+
+if TargetGuiParent:FindFirstChild("KaitunMonitorGui") then
+    TargetGuiParent:FindFirstChild("KaitunMonitorGui"):Destroy()
+end
+
+-- ============================================================
+-- [UI] MONITOR BLACK + TOGGLE SYSTEM WITH CONFIG
+-- ============================================================
+local ScreenGui = Instance.new("ScreenGui", TargetGuiParent)
+ScreenGui.Name = "KaitunMonitorGui"
+ScreenGui.ResetOnSpawn = false
+
+local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.Size = UDim2.new(0, 240, 0, 140)
+MainFrame.Position = UDim2.new(0.05, 0, 0.15, 0)
+MainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+MainFrame.BorderSizePixel = 1
+MainFrame.BorderColor3 = Color3.fromRGB(40, 40, 40)
+local Corner = Instance.new("UICorner", MainFrame)
+Corner.CornerRadius = UDim.new(0, 6)
+
+local ProfileImage = Instance.new("ImageLabel", MainFrame)
+ProfileImage.Size = UDim2.new(0, 45, 0, 45)
+ProfileImage.Position = UDim2.new(0, 10, 0, 10)
+ProfileImage.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+ProfileImage.Image = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. LocalPlayer.UserId .. "&width=150&height=150&format=png"
+local CornerImg = Instance.new("UICorner", ProfileImage)
+CornerImg.CornerRadius = UDim.new(0, 4)
+
+local NameLabel = Instance.new("TextLabel", MainFrame)
+NameLabel.Size = UDim2.new(0, 165, 0, 20)
+NameLabel.Position = UDim2.new(0, 65, 0, 10)
+NameLabel.BackgroundTransparency = 1
+NameLabel.Text = "User: " .. LocalPlayer.Name
+NameLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
+NameLabel.Font = Enum.Font.GothamBold
+NameLabel.TextSize = 13
+NameLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+local StatusLabel = Instance.new("TextLabel", MainFrame)
+StatusLabel.Size = UDim2.new(0, 165, 0, 15)
+StatusLabel.Position = UDim2.new(0, 65, 0, 28)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Text = "Status: SNIPING ACTIVE"
+StatusLabel.TextColor3 = Color3.fromRGB(46, 204, 113)
+StatusLabel.Font = Enum.Font.GothamMedium
+StatusLabel.TextSize = 11
+StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+-- ------------------------------------------------------------
+-- KOMPONEN TOGGLE (MELOAD DATA DARI CONFIG)
+-- ------------------------------------------------------------
+local function BuatToggle(nama, urutanY, configKey, fungsiKlik)
+    local defaultOn = Config[configKey]
+    local CheckBtn = Instance.new("TextButton", MainFrame)
+    CheckBtn.Size = UDim2.new(0, 105, 0, 22)
+    CheckBtn.Position = UDim2.new(0, urutanY == 1 and 10 or 125, 0, 65)
+    CheckBtn.BackgroundColor3 = defaultOn and Color3.fromRGB(35, 155, 86) or Color3.fromRGB(45, 45, 45)
+    CheckBtn.Text = nama .. (defaultOn and ": ON" or ": OFF")
+    CheckBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    CheckBtn.Font = Enum.Font.GothamBold
+    CheckBtn.TextSize = 10
+    local BtnCorner = Instance.new("UICorner", CheckBtn)
+    BtnCorner.CornerRadius = UDim.new(0, 4)
+    
+    CheckBtn.MouseButton1Click:Connect(function()
+        Config[configKey] = not Config[configKey]
+        local currentStatus = Config[configKey]
+        
+        CheckBtn.BackgroundColor3 = currentStatus and Color3.fromRGB(35, 155, 86) or Color3.fromRGB(45, 45, 45)
+        CheckBtn.Text = nama .. (currentStatus and ": ON" or ": OFF")
+        
+        -- Langsung simpan perubahan saat tombol di-klik
+        SaveConfig()
+        fungsiKlik(currentStatus)
+    end)
+end
+
+-- Pasang Toggle Normal Seed (Status otomatis mematuhi Config)
+BuatToggle("Normal Seed", 1, "AutoNormalSeed", function(state) end)
+
+-- Pasang Toggle Seed Event (Status otomatis mematuhi Config)
+BuatToggle("Seed Event", 2, "AutoSeedEvent", function(state) end)
+
+-- Label Timer Server Hop
+local TimerLabel = Instance.new("TextLabel", MainFrame)
+TimerLabel.Size = UDim2.new(1, -20, 0, 25)
+TimerLabel.Position = UDim2.new(0, 10, 0, 100)
+TimerLabel.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+TimerLabel.Text = "Server Hop In: 30m 00s"
+TimerLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+TimerLabel.Font = Enum.Font.GothamBold
+TimerLabel.TextSize = 12
+local CornerTimer = Instance.new("UICorner", TimerLabel)
+CornerTimer.CornerRadius = UDim.new(0, 4)
+
+-- ============================================================
+-- [LOGIK] SERVER HOPPERS
 -- ============================================================
 local function ServerHop()
+    StatusLabel.Text = "Status: HOPPING SERVER..."
+    StatusLabel.TextColor3 = Color3.fromRGB(231, 76, 60)
+    
     local success, result = pcall(function()
         local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
         return HttpService:JSONDecode(game:HttpGet(url))
@@ -34,72 +171,69 @@ local function ServerHop()
     end
 end
 
-local function PeriksaNama(player)
-    if player == LocalPlayer then return end
-    for _, targetName in ipairs(MyAccountList) do
-        if player.Name:lower() == targetName:lower() then ServerHop() break end
+task.spawn(function()
+    while TimeLeft > 0 do
+        task.wait(1)
+        TimeLeft = TimeLeft - 1
+        local minutes = math.floor(TimeLeft / 60)
+        local seconds = TimeLeft % 60
+        TimerLabel.Text = string.format("Server Hop In: %dm %02ds", minutes, seconds)
     end
-end
-for _, p in ipairs(Players:GetPlayers()) do PeriksaNama(p) end
-Players.PlayerAdded:Connect(PeriksaNama)
-
--- ============================================================
--- FITUR 2: ULTRA FAST CUSTOM UI CLICKER (BYPASS LOADING HOLD)
--- ============================================================
--- Fungsi pembantu untuk mendeteksi dan memicu klik instan pada UI ambil barang
-local function AutoClickCollectUI()
-    pcall(function()
-        -- Mencari keseleruhan UI di layar player yang punya fungsi interaksi / pick up
-        -- Biasanya tombol ini muncul di dalam BillboardGui di atas item atau di ScreenGui utama
-        for _, gui in ipairs(PlayerGui:GetDescendants()) do
-            if gui:IsA("GuiButton") and gui.Visible and (gui.Name:lower():find("pick") or gui.Name:lower():find("collect") or gui.Name:lower():find("take")) then
-                
-                -- METODE BYPASS 1: Meniru penekanan tombol instan (Mouse Down & Mouse Up) tanpa jeda loading
-                if getconnections then
-                    for _, connection in pairs(getconnections(gui.MouseButton1Down)) do connection:Fire() end
-                    task.wait(0.05) -- Jeda mikro tiruan hold
-                    for _, connection in pairs(getconnections(gui.MouseButton1Up)) do connection:Fire() end
-                    for _, connection in pairs(getconnections(gui.MouseButton1Click)) do connection:Fire() end
-                end
-            end
-        end
-    end)
-end
-
--- ============================================================
--- FITUR 3: INSTANT TELEPORT SNIPER (FOLDER DROPPEDITEMS)
--- ============================================================
-local DroppedItems = workspace:WaitForChild("DroppedItems")
-
-local function SikatItem(item)
-    local targetPart = item:IsA("BasePart") and item or item:FindFirstChildWhichIsA("BasePart") or item.PrimaryPart
-    
-    if targetPart then
-        local character = LocalPlayer.Character
-        local root = character and character:FindFirstChild("HumanoidRootPart")
-        
-        if root then
-            -- 1. Teleport ke item
-            root.CFrame = targetPart.CFrame * CFrame.new(0, 1, 0)
-            
-            -- 2. Langsung paksa klik UI tombol ambil yang muncul di layar saat itu juga!
-            task.wait(0.1) -- Jeda sangat pendek agar UI-nya sempat muncul di layar client
-            AutoClickCollectUI()
-        end
-    end
-end
-
--- Scan item yang sudah ada atau baru jatuh
-for _, item in ipairs(DroppedItems:GetChildren()) do SikatItem(item) end
-DroppedItems.ChildAdded:Connect(function(newItem)
-    task.wait(0.01)
-    SikatItem(newItem)
+    ServerHop()
 end)
 
 -- ============================================================
--- FITUR 4: TIMEOUT SERVER HOPPER (30 MENIT)
+-- [CORE] TELEPORT & SEED INTERACTION BYPASS
 -- ============================================================
-task.spawn(function()
-    task.wait(30 * 60)
-    ServerHop()
+local function AmbilPromptInstan(itemObject)
+    local prompt = itemObject:FindFirstChildWhichIsA("ProximityPrompt", true)
+    if prompt then
+        prompt.HoldDuration = 0
+        task.spawn(function()
+            prompt:InputHoldBegin()
+            task.wait(0.01)
+            prompt:InputHoldEnd()
+            if fireproximityprompt then
+                fireproximityprompt(prompt)
+            end
+        end)
+    end
+end
+
+local DroppedItems = workspace:WaitForChild("DroppedItems")
+
+local function ProsesSikatItem(item)
+    local targetPart = item:IsA("BasePart") and item or item:FindFirstChildWhichIsA("BasePart") or item.PrimaryPart
+    if not targetPart then return end
+    
+    local namaKecil = item.Name:lower()
+    local IsEventSeed = namaKecil:find("rainbow") or namaKecil:find("gold") or namaKecil:find("event")
+    
+    -- Filter validasi membaca tabel Config terbaru
+    if IsEventSeed and not Config.AutoSeedEvent then return end 
+    if not IsEventSeed and not Config.AutoNormalSeed then return end 
+    
+    local character = LocalPlayer.Character
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    
+    if root then
+        StatusLabel.Text = IsEventSeed and "Status: SNIPING EVENT SEED! 🔥" or "Status: SNIPING NORMAL SEED"
+        StatusLabel.TextColor3 = IsEventSeed and Color3.fromRGB(255, 140, 0) or Color3.fromRGB(241, 196, 15)
+        
+        root.CFrame = targetPart.CFrame * CFrame.new(0, 1, 0)
+        task.wait(IsEventSeed and 0.12 or 0.08)
+        
+        AmbilPromptInstan(item)
+        
+        task.wait(0.05)
+        StatusLabel.Text = "Status: SNIPING ACTIVE"
+        StatusLabel.TextColor3 = Color3.fromRGB(46, 204, 113)
+    end
+end
+
+for _, item in ipairs(DroppedItems:GetChildren()) do ProsesSikatItem(item) end
+
+DroppedItems.ChildAdded:Connect(function(newItem)
+    task.wait(0.02)
+    ProsesSikatItem(newItem)
 end)
